@@ -64,12 +64,16 @@ if parallel_visual in app:
 elif sequential_visual in app:
     app = once(
         app,
-        sequential_visual,
-        '''    const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
-    if (cloudAnalysisAllowed) {
-      visualText = await runGeminiPhotoFallback();
-    }''',
-        "Gemini explicit opt-in",
+        '''  let visualText = null;
+  if (!bodyComp && !clad) {
+    visualText = await runGeminiPhotoFallback();
+  }''',
+        '''  const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
+  let visualText = null;
+  if (!bodyComp && !clad && cloudAnalysisAllowed) {
+    visualText = await runGeminiPhotoFallback();
+  }''',
+        "Gemini explicit opt-in with function-scoped consent state",
     )
 elif "$('#scan-cloud-consent')?.checked === true" not in app:
     raise SystemExit("Gemini opt-in is not enforced in the scanner code.")
