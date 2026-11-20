@@ -32,7 +32,7 @@ helper = """function formaEnsureCloudScanConsent() {
   try {
     if (localStorage.getItem("forma.cloud-scan-consent.v1") === "accepted") return true;
     const accepted = window.confirm(
-      "Para completar el análisis cuando el procesamiento del teléfono no sea suficiente, algunas fotografías podrán enviarse a un servicio remoto de procesamiento. ¿Autorizas este uso? Puedes continuar sin autorizarlo, pero el análisis podría quedar limitado."
+      "Para completar el análisis cuando el procesamiento del teléfono no sea suficiente, algunas fotografías podrán enviarse a un servicio remoto de procesamiento. Ese uso puede consumir la cuota o generar costes según la cuenta conectada. ¿Autorizas este uso? Puedes continuar sin autorizarlo, pero el análisis podría quedar limitado."
     );
     if (accepted) localStorage.setItem("forma.cloud-scan-consent.v1", "accepted");
     return accepted;
@@ -64,6 +64,13 @@ app = app.replace(
     ""
 )
 app = app.replace("$('#forma-clad-consent')?.checked === true;", "formaRemoteScanAllowed;")
+app = re.sub(
+    r'const canRunClad = Boolean\\(imageForClad\\) &&\\s*Number\\(profile\\.height\\) >= 140 &&\\s*Number\\(profile\\.height\\) <= 220 &&\\s*formaRemoteScanAllowed;',
+    'const canRunClad = false;',
+    app,
+    count=1,
+)
+
 app = app.replace("const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;", "const cloudAnalysisAllowed = formaRemoteScanAllowed;")
 app = app.replace(
     """    const visualFallbackDone = $('#scan-cloud-consent')?.checked === true
