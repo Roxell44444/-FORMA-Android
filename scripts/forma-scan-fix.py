@@ -22,6 +22,10 @@ html = re.sub(
     flags=re.S,
 )
 html = html.replace("Gemini", "procesamiento remoto").replace("Clad", "procesamiento remoto")
+html = html.replace(
+    '<strong>Personalizar respuestas con mis datos</strong><small>Si lo activas, FORMA enviará a procesamiento remoto un resumen de tu perfil y evolución. Tu pregunta se envía al Coach cuando la envías.</small>',
+    '<strong>Incluir mi perfil, escáner y progreso en el Coach</strong><small>Al activarlo, el Coach recibirá datos resumidos de tu perfil, último análisis corporal y evolución. Nunca se envían las fotografías.</small>'
+)
 if "scan-cloud-consent" in html or "forma-clad-consent" in html:
     raise SystemExit("Provider-specific scanner copy or controls remain in the user interface.")
 html_path.write_text(html, encoding="utf-8")
@@ -268,7 +272,7 @@ app = app.replace(
 
 # Persistent, explicit Coach permission for a numeric summary (not photographs).
 app = app.replace(
-    "<strong>Personalizar respuestas con mis datos</strong><small>Si lo activas, FORMA enviará a procesamiento remoto un resumen de tu perfil y evolución. Tu pregunta se procesa al pulsar el botón.</small>",
+    "<strong>Incluir mi perfil, escáner y progreso en el Coach</strong><small>Al activarlo, el Coach recibirá datos resumidos de tu perfil, último análisis corporal y evolución. Nunca se envían las fotografías.</small>",
     "<strong>Incluir mi perfil, escáner y progreso en el Coach</strong><small>Al activarlo, el Coach recibirá datos resumidos de tu perfil, último análisis corporal y evolución. Nunca se envían las fotografías.</small>"
 )
 coach_anchor = "function coachContextForGemini() {"
