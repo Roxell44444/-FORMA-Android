@@ -51,6 +51,8 @@ test("Gemini Coach uses Interactions and disables server-side conversation stora
     assert.equal(observed.options.headers["x-goog-api-key"], "test-gemini-key");
     assert.equal(observed.body.model, "gemini-3.8-flash");
     assert.equal(observed.body.store, false);
+    assert.match(observed.body.system_instruction, /FORMA Coach/);
+    assert.equal(observed.body.generation_config.temperature, 0.45);
     assert.equal(observed.body.input[0].type, "text");
   } finally {
     globalThis.fetch = originalFetch;
