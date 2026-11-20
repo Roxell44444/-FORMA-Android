@@ -7,6 +7,7 @@ on:
       - 'assets/forma-app-icon.webp'
       - 'scripts/forma-redesign.py.gz'
       - 'scripts/forma-integrate.py'
+      - 'scripts/forma-pose-compat.py'
       - 'scripts/forma-clad.py'
       - 'assets/backend-config.json'
       - 'backend/worker.js'
@@ -80,6 +81,7 @@ jobs:
           curl --fail --location --retry 3 --connect-timeout 20             "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"             --output FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           test -s FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           python3 scripts/forma-integrate.py
+          python3 scripts/forma-pose-compat.py
           python3 scripts/forma-clad.py
           node --check backend/worker.js
           npm --prefix backend test
