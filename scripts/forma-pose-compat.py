@@ -7,6 +7,14 @@ path = Path("FORMA-1.1.0/src/scanner/pose.js")
 if not path.is_file():
     raise SystemExit(f"Missing generated scanner source: {path}")
 source = path.read_text(encoding="utf-8")
+# MediaPipe appends "/vision_wasm_internal.js" to this base path itself.
+# Keep the base URL without a trailing slash to avoid a double-slash URL on Android WebView.
+old_wasm_url = "const WASM_URL = new URL('wasm/', VISION_BASE).href;"
+new_wasm_url = "const WASM_URL = new URL('wasm', VISION_BASE).href;"
+if old_wasm_url not in source and new_wasm_url not in source:
+    raise SystemExit("Could not find the expected MediaPipe WASM base URL.")
+source = source.replace(old_wasm_url, new_wasm_url)
+
 pattern = re.compile(
     r"export async function createPoseLandmarker\(\) \{.*?\n\}\n\nexport function resetPoseLandmarkerForTests",
     re.S,
