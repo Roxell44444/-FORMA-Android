@@ -9,6 +9,7 @@ on:
       - 'scripts/forma-integrate.py'
       - 'scripts/forma-pose-compat.py'
       - 'scripts/forma-clad.py'
+      - 'scripts/forma-pro.py'
       - 'assets/backend-config.json'
       - 'backend/worker.js'
       - 'backend/wrangler.toml'
@@ -78,11 +79,28 @@ jobs:
             test -s "FORMA-1.1.0/vendor/bodycomp/$file"
           done
           curl --fail --location --retry 3 "https://raw.githubusercontent.com/rishabcv-eng/bodycomp/$COMMIT/LICENSE" --output FORMA-1.1.0/vendor/bodycomp/LICENSE
+          MODEL_DIR=FORMA-1.1.0/models/bodycomp
+          MODEL_BASE="https://raw.githubusercontent.com/rishabcv-eng/bodycomp/$COMMIT/app/public/models"
+          curl --fail --location --retry 3 "$MODEL_BASE/manifest.json" --output "$MODEL_DIR/manifest.json"
+          node - "$MODEL_DIR/manifest.json" > /tmp/forma-model-files.txt <<'NODE'
+          const fs = require("node:fs");
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const files = new Set(Object.values(manifest.stage1));
+          for (const group of Object.values(manifest.stage2)) for (const part of ["point", "lo", "hi"]) files.add(group[part]);
+          for (const file of files) console.log(file);
+          NODE
+          while IFS= read -r file; do
+            test -n "$file"
+            curl --fail --location --retry 3 "$MODEL_BASE/$file" --output "$MODEL_DIR/$file"
+            test "$(stat -c%s "$MODEL_DIR/$file")" -gt 1024
+          done < /tmp/forma-model-files.txt
+          test -s "$MODEL_DIR/manifest.json"
           curl --fail --location --retry 3 --connect-timeout 20             "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"             --output FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           test -s FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           python3 scripts/forma-integrate.py
           python3 scripts/forma-pose-compat.py
           python3 scripts/forma-clad.py
+          python3 scripts/forma-pro.py
           node --check backend/worker.js
           npm --prefix backend test
           python3 - <<'PY'
@@ -90,13 +108,13 @@ jobs:
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.6.0"
+          data["version"] = "1.7.0"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8")
-          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.6.0"', s)
+          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.7.0"', s)
           assert 'versionName "1.6.0"' in s, "Android versionName was not updated"
-          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 8", s)
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 9", s)
           assert "versionCode 8" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
@@ -175,6 +193,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.6.0-debug-apk
+          name: FORMA-1.7.0-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
