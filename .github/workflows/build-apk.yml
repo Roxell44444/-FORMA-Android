@@ -25,6 +25,35 @@ jobs:
           cp assets/forma-app-icon.webp FORMA-1.1.0/android/app/src/main/res/drawable-nodpi/forma_launcher.webp
           sed -i 's/vision_bundle.mjs/vision_bundle.js/g' FORMA-1.1.0/src/scanner/pose.js FORMA-1.1.0/service-worker.js
 
+      - name: Simplify remaining user-facing copy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          index = Path('FORMA-1.1.0/index.html')
+          html = index.read_text(encoding='utf-8')
+          html = html.replace('<small>Los datos se guardan localmente en este dispositivo.</small>', '')
+          index.write_text(html, encoding='utf-8')
+          app = Path('FORMA-1.1.0/src/app.js')
+          js = app.read_text(encoding='utf-8')
+          replacements = {
+              'MODO DE PERFIL': 'PERFIL',
+              'GRASA CORPORAL · ESTIMACIÓN HÍBRIDA': 'GRASA CORPORAL ESTIMADA',
+              'MÚSCULO ESQUELÉTICO APENDICULAR': 'REFERENCIA MUSCULAR',
+              'MÚSCULO APENDICULAR': 'REFERENCIA MUSCULAR',
+              'Selecciona una referencia sexual compatible con las ecuaciones poblacionales para calcular este índice.': 'Completa tus datos para obtener una estimación orientativa.',
+              'Se necesita una referencia sexual compatible con la ecuación.': 'Completa los datos disponibles para obtener una referencia.',
+              'No aplicamos ecuaciones adultas ni confundimos masa libre de grasa con músculo.': 'En menores, las recomendaciones priorizan el crecimiento y el bienestar.',
+              'Los percentiles no se calculan en esta versión.': 'Consulta el seguimiento con un profesional pediátrico.',
+              'No hay una ecuación validada integrada para esta etapa.': 'Consulta el seguimiento con un profesional pediátrico.',
+              'RMSE de estudio: ${fmt(pediatricFat.studyRmsePercentagePoints,2)} puntos a nivel de grupo; no es margen individual.': 'Es una estimación orientativa.',
+              'Restaurar este respaldo reemplazará los datos locales actuales.': 'Restaurar este respaldo reemplazará los datos actuales.',
+              'Entrenador': 'Coach'
+          }
+          for old, new in replacements.items():
+              js = js.replace(old, new)
+          app.write_text(js, encoding='utf-8')
+          PY
+
       - name: Package on-device body analysis
         working-directory: FORMA-1.1.0
         run: |
