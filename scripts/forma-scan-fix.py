@@ -9,7 +9,7 @@ app = app_path.read_text(encoding="utf-8")
 
 # Remove provider-specific permission checkboxes and provider names from the scanner UI.
 for element_id in ("scan-cloud-consent", "forma-clad-consent"):
-    pattern = re.compile(r'<label\\b[^>]*>\\s*<input\\b[^>]*id="' + re.escape(element_id) + r'"[^>]*>.*?</label>', re.S)
+    pattern = re.compile(r'<label\b[^>]*>\s*<input\b[^>]*id="' + re.escape(element_id) + r'"[^>]*>.*?</label>', re.S)
     html, count = pattern.subn("", html, count=1)
     if count != 1:
         raise SystemExit(f"Could not safely remove scanner provider control: {element_id}")
@@ -21,7 +21,8 @@ html = re.sub(
     count=1,
     flags=re.S,
 )
-if "Gemini" in html or "Clad" in html or "scan-cloud-consent" in html or "forma-clad-consent" in html:
+html = html.replace("Gemini", "procesamiento remoto").replace("Clad", "procesamiento remoto")
+if "scan-cloud-consent" in html or "forma-clad-consent" in html:
     raise SystemExit("Provider-specific scanner copy or controls remain in the user interface.")
 html_path.write_text(html, encoding="utf-8")
 
@@ -57,9 +58,9 @@ if app.count(anchor) != 1:
 if "function formaEnsureCloudScanConsent()" not in app:
     app = app.replace(anchor, helper + anchor, 1)
 
-# The remote visual fallback must not be silently blocked by a hidden checkbox.
-app = re.sub(r'\\s*// El envío de fotografías a Gemini requiere consentimiento explícito del usuario\\.\\n\\s*if \(!\$\(\x27#scan-cloud-consent\x27\)\?\.checked\) return null;\\n', "\n", app, count=1)
-app = app.replace("$('#forma-clad-consent')?.checked === true;", "true;")
+# The remote visual fallback must be governed by one generic consent decision.
+app = re.sub(r'\s*// El envío de fotografías a Gemini requiere consentimiento explícito del usuario\.\n\s*if \(!\$\(\x27#scan-cloud-consent\x27\)\?\.checked\) return null;\n', "\n", app, count=1)
+app = app.replace("$('#forma-clad-consent')?.checked === true;", "formaRemoteScanAllowed;")
 app = app.replace(
     """    const visualFallbackDone = $('#scan-cloud-consent')?.checked === true
       ? await runGeminiPhotoFallback()
@@ -90,17 +91,20 @@ app = app.replace(
   ]);"""
 )
 
-# Ask once before any remote photo processing; no vendor names or per-engine switches.
+# Ask once before any remote photo processing; declining still allows local analysis.
+if "let formaRemoteScanAllowed = false;" not in app:
+    app = app.replace(anchor, "let formaRemoteScanAllowed = false;\\n\\n" + anchor, 1)
+fallback_anchor = "async function runGeminiPhotoFallback() {"
+if app.count(fallback_anchor) != 1:
+    raise SystemExit("Could not find visual fallback entry point.")
+app = app.replace(fallback_anchor, fallback_anchor + "\\n  if (!formaRemoteScanAllowed) return null;", 1)
 start_anchor = """  scanBusy = true;
   updateScanButton();"""
 if app.count(start_anchor) != 1:
     raise SystemExit("Could not safely insert one-time scan privacy confirmation.")
 app = app.replace(
     start_anchor,
-    """  if (!formaEnsureCloudScanConsent()) {
-    $('#capture-status').textContent = "Análisis local disponible. No autorizaste el procesamiento remoto; algunas estimaciones podrían no estar disponibles.";
-    return;
-  }
+    """  formaRemoteScanAllowed = formaEnsureCloudScanConsent();
   scanBusy = true;
   updateScanButton();""",
     1
