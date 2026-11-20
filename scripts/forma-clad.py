@@ -12,7 +12,7 @@ def once(text, old, new, label):
 index_path = ROOT / "index.html"
 html = index_path.read_text(encoding="utf-8")
 anchor = '              <label class="external-consent"><input type="checkbox" id="scan-fallback-consent" />'
-consent = '''              <label class="external-consent"><input type="checkbox" id="clad-scan-consent" /><span><strong>Permitir reconstrucción 3D con Clad</strong><small>Con tu permiso, se enviará solo tu foto frontal y estatura a Clad para reconstruir un modelo 3D y estimar perímetros. No se enviará la foto lateral. Clad aún no ofrece una estimación validada de grasa o músculo.</small></span></label>
+consent = '''              <p class="scan-privacy-note">La reconstrucción de perímetros utiliza la vista frontal. La estimación de composición corporal se realiza por separado y puede no estar disponible en todos los análisis.</p>
 '''
 if "id=\"clad-scan-consent\"" not in html:
     html = once(html, anchor, consent + anchor, "Clad consent insertion")
@@ -52,14 +52,14 @@ new_scan = '''function cladMeasurementsFromResult(data) {
 }
 
 async function runCladPhotoScan() {
-  if (!$('#clad-scan-consent')?.checked) return null;
+  // La reconstrucción se inicia automáticamente como parte del análisis.
   const heightCm = Number(state.profile?.height);
   if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 220) {
-    throw new Error("Clad admite estaturas entre 140 y 220 cm.");
+    throw new Error("La reconstrucción admite estaturas entre 140 y 220 cm.");
   }
   const frontImage = await imageToCompactDataUrl($('img', $('#slot-front')));
   const job = await startCladPhotoJob({ frontImage, heightCm });
-  if (!job.jobId || !job.pollUrl) throw new Error("Clad no inició la reconstrucción.");
+  if (!job.jobId || !job.pollUrl) throw new Error("No se pudo iniciar la reconstrucción 3D.");
   const startedAt = Date.now();
   let lastStatus = "queued";
   while (Date.now() - startedAt < 300000) {
@@ -71,8 +71,8 @@ async function runCladPhotoScan() {
         has3dModel: result.has3dModel === true
       };
     }
-    if (result.status === "failed") throw new Error(result.error || "Clad no pudo completar el análisis.");
-    $('#capture-status').textContent = "BodyComp está analizando tus fotos. Clad está reconstruyendo el modelo 3D…";
+    if (result.status === "failed") throw new Error(result.error || "No se pudo completar la reconstrucción 3D.");
+    $('#capture-status').textContent = "BodyComp está analizando tus fotos. Se está reconstruyendo el modelo 3D…";
     await new Promise(resolve => setTimeout(resolve, 2200));
   }
   throw new Error("La reconstrucción 3D de Clad superó el tiempo de espera.");
@@ -109,7 +109,7 @@ async function runBodyScan() {
     $('img', $('#slot-front')), $('img', $('#slot-side')), state.profile,
     poseResults.front.landmarks, poseResults.side.landmarks
   );
-  const cladEnabled = Boolean($('#clad-scan-consent')?.checked);
+  const cladEnabled = true;
   const cladPromise = cladEnabled ? runCladPhotoScan() : Promise.resolve(null);
   $('#capture-status').textContent = cladEnabled
     ? 'Estamos analizando tus fotos y preparando la reconstrucción 3D…'
@@ -215,10 +215,10 @@ async function runBodyScan() {
   renderPlan();
   renderDiet();
   $('#capture-status').textContent = bodyComp && clad
-    ? 'Análisis completado con BodyComp y reconstrucción 3D de Clad. Las diferencias entre perímetros se muestran por separado.'
+    ? 'Análisis completado. Las medidas de los dos sistemas se muestran por separado.'
     : bodyComp
-      ? (cladEnabled ? 'BodyComp completó el análisis. La reconstrucción 3D de Clad no estuvo disponible.' : 'Análisis corporal completado.')
-      : 'Clad completó la reconstrucción 3D y las medidas. La composición corporal no está disponible en este resultado.';
+      ? (cladEnabled ? 'El análisis corporal está listo. La reconstrucción 3D no estuvo disponible.' : 'Análisis corporal completado.')
+      : 'La reconstrucción 3D y las medidas están listas. La composición corporal no está disponible en este resultado.';
   $('#pose-pair-summary').textContent = 'Tus fotos se procesaron según los servicios autorizados.';
   $('#view-personal-plan')?.classList.remove('hidden');
   toast('Análisis completado. Tu plan está preparado.');
