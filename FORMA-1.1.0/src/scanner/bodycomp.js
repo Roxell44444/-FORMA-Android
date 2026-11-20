@@ -80,10 +80,9 @@ async function makeSilhouette(image, landmarks, engine) {
       for (let i = 0; i < confidence.length; i++) confidence[i] += values[i];
     }
     const mask = buildMask(confidence, width, height);
+    // Quality is reported to the user, not used as a hard stop. We still run
+    // the model on imperfect silhouettes and label the result as limited.
     const quality = qualityCheck(mask, width, height, landmarks);
-    if (!quality.usable) {
-      throw new Error(quality.issues.slice(0, 3).join(" "));
-    }
     return { mask, width, height, quality };
   } finally {
     result.close?.();
@@ -108,9 +107,8 @@ export async function analyseBodyCompPhotos(frontImage, sideImage, profile, fron
       heightCm < 130 || heightCm > 230 || weightKg <= 0) {
     throw new Error("Revisa tu estatura y peso antes de repetir el análisis.");
   }
-  if (!frontLandmarks?.length || !sideLandmarks?.length) {
-    throw new Error("No se detectó la postura con claridad en ambas fotografías.");
-  }
+  // Pose landmarks improve quality diagnostics, but are not required to attempt
+  // segmentation and silhouette inference from the two supplied photographs.
 
   const [engine] = await Promise.all([segmenter(), models()]);
   const [front, side] = await Promise.all([
@@ -140,7 +138,10 @@ export async function analyseBodyCompPhotos(frontImage, sideImage, profile, fron
 
   return {
     output,
-    quality: { front: front.quality.metrics, side: side.quality.metrics },
+    quality: {
+      front: { usable: front.quality.usable, issues: front.quality.issues, metrics: front.quality.metrics },
+      side: { usable: side.quality.usable, issues: side.quality.issues, metrics: side.quality.metrics }
+    },
     mae: bodyFat.mae,
     coverage80: bodyFat.coverage80
   };
