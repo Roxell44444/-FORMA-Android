@@ -338,7 +338,7 @@ export default {
 
     if (url.pathname === "/api/scan-fallback") {
       let body;
-      try { body = await readJson(request); } catch (error) { return errorMessage(request, env, error.message, 400); }
+      try { body = await readJson(request); } catch (error) { return errorMessage(request, env, error.message, error.message === "La solicitud supera el tamaño permitido." ? 413 : 400); }
       const supplied = Array.isArray(body.images) ? body.images : [
         ...(body.frontImage ? [{ label: "Fotografía 1", image: body.frontImage }] : []),
         ...(body.sideImage ? [{ label: "Fotografía 2", image: body.sideImage }] : [])
