@@ -283,12 +283,15 @@ new_render = '''function renderScanResult() {
     return;
   }
 
-  if (result.visualFallback) {
-    const visualHtml = escapeHTML(result.visualFallback.text || "")
-      .replace(/^#{1,3}\\s*(.+)$/gm, '<h4>$1</h4>')
-      .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-      .replace(/^[-•]\\s+(.+)$/gm, '<div class="visual-report-line">• $1</div>')
-      .replace(/\\r?\\n/g, '<br>');
+  const visualHtml = result.visualFallback
+    ? escapeHTML(result.visualFallback.text || "")
+        .replace(/^#{1,3}\\s*(.+)$/gm, '<h4>$1</h4>')
+        .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/^[-•]\\s+(.+)$/gm, '<div class="visual-report-line">• $1</div>')
+        .replace(/\\r?\\n/g, '<br>')
+    : "";
+  const hasNumericResult = Boolean(result.composition || Object.keys(result.measurements || {}).length);
+  if (result.visualFallback && !hasNumericResult) {
     root.innerHTML =
       '<section class="scan-composition-report visual-only-report">' +
         '<div class="composition-report-top"><span class="composition-brand">FORMA / BODY INSIGHT</span><span class="composition-status">LECTURA VISUAL</span></div>' +
@@ -313,6 +316,32 @@ new_render = '''function renderScanResult() {
     ? fmt(result.appendicularLeanMassKg, 1) + " kg"
     : "No disponible";
   const source = result.analysisProvider === "Clad" ? "Reconstrucción a partir de fotografía" : "Modelo BodyComp · análisis fotográfico";
+  const qualityIssues = [];
+  for (const [view, label] of [["front", "Foto 1"], ["side", "Foto 2"]]) {
+    for (const issue of (result.captureQuality?.[view]?.issues || []).slice(0, 3)) {
+      let message = "El modelo detectó una limitación en esta imagen.";
+      if (issue.includes("cut off") || issue.includes("missing your legs") || issue.includes("missing your head")) {
+        message = "El cuerpo aparece parcialmente recortado.";
+      } else if (issue.includes("arms")) {
+        message = "La posición de los brazos dificulta leer la silueta.";
+      } else if (issue.includes("lighting") || issue.includes("contrast")) {
+        message = "La iluminación o el contraste dificulta separar el contorno.";
+      } else if (issue.includes("visible") || issue.includes("detect a person")) {
+        message = "No se distinguen con claridad todas las zonas de la silueta.";
+      }
+      qualityIssues.push('<li><span>' + label + '</span>' + message + '</li>');
+    }
+  }
+  const qualityMarkup = result.captureQuality
+    ? '<div class="composition-quality-note"><div class="composition-eyebrow">CALIDAD DE LAS FOTOS</div>' +
+      (qualityIssues.length
+        ? '<p>El análisis se realizó igualmente, pero estas limitaciones pueden reducir la fiabilidad de las cifras.</p><ul>' + qualityIssues.join("") + '</ul>'
+        : '<p>Las imágenes quedaron dentro de los criterios de captura del modelo. Aun así, los resultados siguen siendo estimaciones.</p>') +
+      '</div>'
+    : "";
+  const visualReportMarkup = visualHtml
+    ? '<div class="visual-report-copy composition-visual-reading"><div class="composition-eyebrow">LECTURA VISUAL DE GEMINI</div>' + visualHtml + '</div>'
+    : "";
   const measurementRows = [
     ["Cintura", m.waist?.circumferenceCm],
     ["Cadera", m.hip?.circumferenceCm],
@@ -356,7 +385,7 @@ new_render = '''function renderScanResult() {
         '<div class="composition-section-heading"><span>02</span><div><h3>Medidas corporales</h3><p>Perímetros estimados que el modelo pudo recuperar.</p></div></div>' +
         '<div class="composition-measure-list">' + measurementsHtml + '</div>' +
       '</div>' +
-      '<div class="composition-report-footer"><div class="composition-source"><span class="composition-source-dot"></span><span>' + source + '</span></div><div class="composition-disclaimer"><span>i</span><p>Las estimaciones fotográficas pueden variar con el encuadre, la ropa, la postura y la iluminación. Úsalas para observar tendencias, no como sustituto de una medición profesional.</p></div></div>' +
+      '<div class="composition-report-footer"><div class="composition-source"><span class="composition-source-dot"></span><span>' + source + '</span></div>' + visualReportMarkup + qualityMarkup + '<div class="composition-disclaimer"><span>i</span><p>Las estimaciones fotográficas pueden variar con el encuadre, la ropa, la postura y la iluminación. Úsalas para observar tendencias, no como sustituto de una medición profesional.</p></div></div>' +
     '</section>';
 
   if (result.cladMeasurements && result.analysisProvider === "BodyComp") {
