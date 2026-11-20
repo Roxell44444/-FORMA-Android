@@ -11,16 +11,32 @@ pattern = re.compile(
     r"export async function createPoseLandmarker\(\) \{.*?\n\}\n\nexport function resetPoseLandmarkerForTests",
     re.S,
 )
-replacement = r"""function describePoseError(error) {
-  if (!error) return 'error desconocido';
+replacement = r"""function describePoseError(error, depth = 0) {
+  if (error == null) return 'error desconocido';
+  if (depth > 3) return 'causa anidada';
   const parts = [];
-  if (error.name) parts.push(error.name);
-  if (error.message) parts.push(error.message);
-  if (error.cause && error.cause !== error) {
-    const cause = error.cause;
-    parts.push(cause.name ? cause.name + ': ' + (cause.message || '') : String(cause));
+  const add = (label, value) => {
+    if (value !== undefined && value !== null && String(value).trim()) {
+      parts.push(label ? label + ': ' + String(value).slice(0, 240) : String(value).slice(0, 240));
+    }
+  };
+  if (typeof error === 'string') return error.slice(0, 500);
+  add('', error.name);
+  add('', error.message);
+  if (error.type) add('evento', error.type);
+  if (error.filename) add('archivo', error.filename);
+  if (Number.isFinite(error.lineno) && error.lineno > 0) add('línea', error.lineno);
+  if (Number.isFinite(error.colno) && error.colno > 0) add('columna', error.colno);
+  if (error.error && error.error !== error) add('error interno', describePoseError(error.error, depth + 1));
+  const target = error.target || error.currentTarget;
+  if (target) {
+    add('elemento', target.tagName || target.nodeName || target.constructor?.name);
+    add('recurso', target.currentSrc || target.src || target.href);
+    if (target.error) add('error del recurso', describePoseError(target.error, depth + 1));
   }
-  return parts.join(' — ').slice(0, 500) || String(error).slice(0, 500);
+  if (error.cause && error.cause !== error) add('causa', describePoseError(error.cause, depth + 1));
+  if (error.stack && !error.message) add('pila', String(error.stack).split('\\n').slice(0, 3).join(' '));
+  return (parts.join(' — ') || String(error)).slice(0, 900);
 }
 
 export async function createPoseLandmarker() {
