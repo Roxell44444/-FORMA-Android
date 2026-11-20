@@ -82,7 +82,7 @@ function extractInteractionText(interaction) {
   return pieces.join("\n").trim();
 }
 
-async function generateGemini(env, input) {
+async function generateGemini(env, systemInstruction, input) {
   if (!env.GEMINI_API_KEY) {
     return { error: "El Coach inteligente todavía no está configurado.", status: 503 };
   }
@@ -94,6 +94,8 @@ async function generateGemini(env, input) {
     },
     body: JSON.stringify({
       model: env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      system_instruction: systemInstruction,
+      generation_config: { temperature: 0.45 },
       store: false,
       input: input
     })
@@ -260,7 +262,7 @@ export default {
       if (!message || message.length > 500) return errorMessage(request, env, "La pregunta debe tener entre 1 y 500 caracteres.", 400);
       const context = body.context && typeof body.context === "object" ? body.context : {};
       const contextJson = JSON.stringify(context).slice(0, 7000);
-      const result = await generateGemini(env, [{
+      const result = await generateGemini(env, COACH_RULES, [{
         type: "text",
         text: "Contexto autorizado por el usuario (datos resumidos, no fotografías):\n" +
           contextJson + "\n\nPregunta:\n" + message
@@ -278,8 +280,8 @@ export default {
       } catch (error) {
         return errorMessage(request, env, error.message, 400);
       }
-      const result = await generateGemini(env, [
-        { type: "text", text: VISION_RULES + "\n\nVista frontal:" },
+      const result = await generateGemini(env, VISION_RULES, [
+        { type: "text", text: "Vista frontal:" },
         { type: "image", data: front.base64, mime_type: front.mimeType },
         { type: "text", text: "Vista lateral de la misma persona:" },
         { type: "image", data: side.base64, mime_type: side.mimeType },
