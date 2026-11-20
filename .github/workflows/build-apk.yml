@@ -23,6 +23,7 @@ jobs:
           cp assets/forma-app-icon.webp FORMA-1.1.0/public/icon.webp
           mkdir -p FORMA-1.1.0/android/app/src/main/res/drawable-nodpi
           cp assets/forma-app-icon.webp FORMA-1.1.0/android/app/src/main/res/drawable-nodpi/forma_launcher.webp
+          sed -i 's/vision_bundle.mjs/vision_bundle.js/g' FORMA-1.1.0/src/scanner/pose.js FORMA-1.1.0/service-worker.js
 
       - name: Package on-device body analysis
         working-directory: FORMA-1.1.0
@@ -34,6 +35,8 @@ jobs:
           tar -xzf "$TARBALL" --strip-components=1 -C vendor/mediapipe
           test -f vendor/mediapipe/vision_bundle.mjs
           test -d vendor/mediapipe/wasm
+          cp vendor/mediapipe/vision_bundle.mjs vendor/mediapipe/vision_bundle.js
+          test -f vendor/mediapipe/vision_bundle.js
           curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20             'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'             --output models/pose_landmarker_lite.task
           test -s models/pose_landmarker_lite.task
           mkdir -p android/app/src/main/assets/public
