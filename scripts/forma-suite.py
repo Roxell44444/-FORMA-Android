@@ -193,27 +193,34 @@ function formaSuiteWorkoutsHtml() {
     '<section class="fs-card"><span class="fs-kicker">HISTORIAL</span><h3>Sesiones recientes</h3><div class="fs-history-list">' + rows + '</div></section>';
 }
 
+function formaSuiteAllMeals() {
+  const native = Array.isArray(state?.foodEntries) ? state.foodEntries : [];
+  return [...native, ...formaSuiteRead().meals].filter(item => item && typeof item.date === "string");
+}
+
 function formaSuiteNutritionHtml() {
   const data = formaSuiteRead();
+  const allMeals = formaSuiteAllMeals();
   const today = formaSuiteToday();
-  const todaysMeals = data.meals.filter(item => item.date === today);
+  const todaysMeals = allMeals.filter(item => item.date === today);
   const totals = todaysMeals.reduce((sum, item) => ({
     calories: sum.calories + (Number(item.calories) || 0),
     protein: sum.protein + (Number(item.protein) || 0),
     carbs: sum.carbs + (Number(item.carbs) || 0),
     fat: sum.fat + (Number(item.fat) || 0)
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
-  const recent = data.meals.slice().sort((a, b) => (String(b.date) + String(b.time || "")).localeCompare(String(a.date) + String(a.time || ""))).slice(0, 10);
+  const recent = allMeals.slice().sort((a, b) => (String(b.date) + String(b.time || "")).localeCompare(String(a.date) + String(a.time || ""))).slice(0, 10);
   const rows = recent.length ? recent.map(item =>
     '<div class="fs-history-row"><span>' + formaSuiteEscape(formaSuiteDateLabel(item.date)) + '</span><strong>' +
-    formaSuiteEscape(item.name) + '<small>' + Number(item.calories || 0) + " kcal · P " + Number(item.protein || 0) +
+    formaSuiteEscape(item.name) + '<small>' + formaSuiteEscape(({breakfast:"Desayuno",lunch:"Almuerzo",dinner:"Cena",snack:"Merienda"})[item.mealType] || item.mealType || "Comida") + " · " + Number(item.calories || 0) + " kcal · P " + Number(item.protein || 0) +
     " g · C " + Number(item.carbs || 0) + " g · G " + Number(item.fat || 0) + " g</small></strong></div>"
   ).join("") : '<p class="fs-muted">Registra una comida para empezar a ver tus totales.</p>';
   return '<div class="fs-grid fs-macros"><div class="fs-stat"><span>Calorías hoy</span><strong>' + Math.round(totals.calories) + '</strong><small>kcal registradas</small></div>' +
     '<div class="fs-stat"><span>Proteína</span><strong>' + Math.round(totals.protein) + ' g</strong></div><div class="fs-stat"><span>Carbohidratos</span><strong>' + Math.round(totals.carbs) + ' g</strong></div><div class="fs-stat"><span>Grasas</span><strong>' + Math.round(totals.fat) + ' g</strong></div></div>' +
     '<section class="fs-card"><span class="fs-kicker">DIARIO DE ALIMENTACIÓN</span><h3>Añadir comida</h3><p>Introduce cantidades de etiquetas o porciones que conozcas. Los totales son tan precisos como los datos registrados.</p>' +
     '<form id="fs-meal-form" class="fs-form"><label>Fecha<input name="date" type="date" value="' + today + '" required></label>' +
-    '<label>Comida<input name="name" maxlength="100" placeholder="Ej. desayuno, arroz con pollo" required></label>' +
+    '<label>Tipo<select name="mealType"><option value="breakfast">Desayuno</option><option value="lunch">Almuerzo</option><option value="dinner">Cena</option><option value="snack">Merienda</option></select></label>' +
+    '<label>Comida<input name="name" maxlength="100" placeholder="Ej. avena con fruta" required></label>' +
     '<label>Calorías (kcal)<input name="calories" type="number" min="0" max="10000" step="1"></label>' +
     '<label>Proteína (g)<input name="protein" type="number" min="0" max="1000" step=".1"></label>' +
     '<label>Carbohidratos (g)<input name="carbs" type="number" min="0" max="1000" step=".1"></label>' +
@@ -225,19 +232,22 @@ function formaSuiteNutritionHtml() {
 function formaSuiteReviewHtml() {
   const data = formaSuiteRead();
   const workouts = formaSuiteRecent(data.workouts);
-  const meals = formaSuiteRecent(data.meals);
+  const meals = formaSuiteRecent(formaSuiteAllMeals());
+  const exercises = formaSuiteRecent(Array.isArray(state?.exerciseEntries) ? state.exerciseEntries : []);
   const habits = formaSuiteRecent(data.habits);
   const minutes = workouts.reduce((sum, item) => sum + (Number(item.minutes) || 0), 0);
   const protein = meals.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
   const calories = meals.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
   const sleep = habits.filter(item => item.sleepHours !== null && item.sleepHours !== undefined && Number.isFinite(Number(item.sleepHours)));
   const sleepAverage = sleep.length ? (sleep.reduce((sum, item) => sum + Number(item.sleepHours), 0) / sleep.length).toFixed(1) + " h" : "Sin datos";
-  const summary = workouts.length + " entrenamientos, " + minutes + " minutos de actividad, " + meals.length +
-    " comidas registradas, " + Math.round(protein) + " g de proteína acumulada y sueño promedio " + sleepAverage + ".";
+  const summary = workouts.length + " sesiones registradas, " + minutes + " minutos de actividad, " +
+    exercises.length + " ejercicios del diario, " + meals.length + " comidas registradas, " +
+    Math.round(protein) + " g de proteína acumulada y sueño promedio " + sleepAverage + ".";
   return '<section class="fs-card"><span class="fs-kicker">ÚLTIMOS 7 DÍAS</span><h3>Tu revisión semanal</h3><div class="fs-grid">' +
     '<div class="fs-stat"><span>Entrenamientos</span><strong>' + workouts.length + '</strong></div>' +
     '<div class="fs-stat"><span>Actividad</span><strong>' + minutes + ' min</strong></div>' +
     '<div class="fs-stat"><span>Comidas registradas</span><strong>' + meals.length + '</strong></div>' +
+    '<div class="fs-stat"><span>Ejercicios del diario</span><strong>' + exercises.length + '</strong></div>' +
     '<div class="fs-stat"><span>Sueño promedio</span><strong>' + sleepAverage + '</strong></div></div>' +
     '<p>' + formaSuiteEscape(summary) + '</p><p class="fs-muted">Los registros incompletos no se interpretan como objetivos incumplidos. La revisión describe únicamente lo que anotaste.</p></section>' +
     '<section class="fs-card"><span class="fs-kicker">HÁBITOS</span><h3>Registrar descanso e hidratación</h3>' +
@@ -262,7 +272,13 @@ function formaSuitePrivacyHtml() {
   return '<section class="fs-card"><span class="fs-kicker">PRIVACIDAD Y CONTROL</span><h3>Tus datos permanecen en este dispositivo</h3>' +
     '<p>El Centro FORMA guarda medidas manuales, comidas, entrenamientos y hábitos en el almacenamiento local de la aplicación. Las fotos de comparación solo viven temporalmente en memoria.</p>' +
     '<div class="fs-privacy-row"><strong>Exportar copia local</strong><span>Descarga un archivo JSON con los registros del Centro y el historial numérico del escáner.</span><button class="fs-secondary" type="button" data-action="export">Exportar mis datos</button></div>' +
-    '<div class="fs-privacy-row"><strong>Borrar registros del Centro</strong><span>Elimina medidas manuales, comidas, entrenamientos y hábitos guardados por esta ampliación.</span><button class="fs-danger" type="button" data-action="delete-suite">Borrar registros del Centro</button></div>' +
+    '<div class="fs-privacy-row"><strong>Borrar registros del Centro</strong><span>Elimina medidas manuales, sesiones y hábitos del Centro. El diario principal se gestiona por separado.</span><button class="fs-danger" type="button" data-action="delete-suite">Borrar registros del Centro</button></div>' +
+    '<div class="fs-privacy-row"><strong>Borrar comidas y ejercicios del diario</strong><span>Elimina solo las comidas y ejercicios registrados en el diario principal; conserva tu perfil y el resto de tus datos.</span><button class="fs-danger" type="button" data-action="delete-diary">Borrar comidas y ejercicios</button></div>' +
+    '<div class="fs-privacy-row"><strong>Borrar historial numérico del escáner</strong><span>Elimina las tendencias guardadas del escáner. No borra tu perfil ni el resto de la aplicación.</span><button class="fs-danger" type="button" data-action="delete-scans">Borrar historial del escáner</button></div>' +
+    '<p class="fs-muted">La conexión en la nube queda desactivada en esta versión: primero se necesita una identidad de usuario y un sistema de autenticación seguro. CORS y límites por IP no sustituyen una cuenta.</p></section>';
+}
+
+function formaSuiteClose() {
     '<div class="fs-privacy-row"><strong>Borrar historial numérico del escáner</strong><span>Elimina las tendencias guardadas del escáner. No borra tu perfil ni el resto de la aplicación.</span><button class="fs-danger" type="button" data-action="delete-scans">Borrar historial del escáner</button></div>' +
     '<p class="fs-muted">La conexión en la nube queda desactivada en esta versión: primero se necesita una identidad de usuario y un sistema de autenticación seguro. CORS y límites por IP no sustituyen una cuenta.</p></section>';
 }
@@ -342,15 +358,23 @@ function formaSuiteSaveWorkout(form) {
 }
 
 function formaSuiteSaveMeal(form) {
-  const name = form.elements.name.value.trim().slice(0, 100);
-  if (!name) return;
-  const values = formaSuiteCollectForm(form, [
-    ["calories", 0, 10000], ["protein", 0, 1000], ["carbs", 0, 1000], ["fat", 0, 1000]
-  ]);
-  const data = formaSuiteRead();
-  data.meals.push({ date: form.elements.date.value, name, ...values });
-  formaSuiteWrite(data);
-  formaSuiteRender("nutricion");
+  try {
+    const values = new FormData(form);
+    const entry = validateFoodEntry({
+      name: values.get("name"), mealType: values.get("mealType"), date: values.get("date"),
+      calories: values.get("calories"), protein: values.get("protein"),
+      carbs: values.get("carbs"), fat: values.get("fat")
+    });
+    state.foodEntries = Array.isArray(state.foodEntries) ? state.foodEntries : [];
+    state.foodEntries.push({ ...entry, id: idForEntry(), createdAt: new Date().toISOString() });
+    saveState();
+    form.reset();
+    form.elements.date.value = formaSuiteToday();
+    renderDiary();
+    formaSuiteRender("nutricion");
+  } catch (error) {
+    alert(error?.message || "No se pudo guardar la comida.");
+  }
 }
 
 function formaSuiteSaveHabit(form) {
@@ -381,7 +405,8 @@ function formaSuiteBuildCoachContext() {
     progress: {
       manualMeasurements: data.measurements.slice(-5),
       workoutsLast7Days: formaSuiteRecent(data.workouts).length,
-      mealsLast7Days: formaSuiteRecent(data.meals).length,
+      exerciseEntriesLast7Days: formaSuiteRecent(Array.isArray(state.exerciseEntries) ? state.exerciseEntries : []).length,
+      mealsLast7Days: formaSuiteRecent(formaSuiteAllMeals()).length,
       habitsLast7Days: formaSuiteRecent(data.habits).length
     }
   } : { profile: null, latestScan: null, progress: null };
@@ -446,6 +471,13 @@ function formaSuiteExport() {
     exportedAt: new Date().toISOString(),
     privacy: "Exportación local; no contiene fotografías.",
     suite: formaSuiteRead(),
+    appData: {
+      profile: state?.profile || null,
+      completedWorkouts: state?.completedWorkouts || [],
+      foodEntries: state?.foodEntries || [],
+      exerciseEntries: state?.exerciseEntries || [],
+      activityEntries: state?.activityEntries || []
+    },
     scanHistory: formaSuiteScanHistory()
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -548,6 +580,7 @@ function formaSuiteInit() {
       }
     }
     if (action === "delete-scans") formaSuiteDeleteScans();
+    if (action === "delete-diary") formaSuiteDeleteDiary();
     if (action === "weekly-review") formaSuiteWeeklyReview();
   });
 
