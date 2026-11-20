@@ -123,10 +123,10 @@ async function runBodyScan() {
     Number(profile.height) >= 140 && Number(profile.height) <= 220 &&
     $('#forma-clad-consent')?.checked === true;
   const cladPromise = canRunClad ? runCladPhotoScan(imageForClad) : Promise.resolve(null);
-  const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());
-
-  const [bodyCompResult, cladResult, visualResult] = await Promise.allSettled([
-    bodyCompPromise, cladPromise, visualPromise
+  // Start numeric engines in parallel. Do not upload photos to Gemini if a
+  // local/provider engine already produced a usable numeric result.
+  const [bodyCompResult, cladResult] = await Promise.allSettled([
+    bodyCompPromise, cladPromise
   ]);
   let bodyComp = bodyCompResult.status === "fulfilled" ? bodyCompResult.value : null;
   const captureQualityFromBodyComp = bodyComp?.quality || null;
@@ -141,14 +141,17 @@ async function runBodyScan() {
     bodyComp = null;
   }
   const clad = cladResult.status === "fulfilled" ? cladResult.value : null;
-  const visualText = visualResult.status === "fulfilled" && typeof visualResult.value === "string"
-    ? visualResult.value : null;
+  let visualText = null;
+  if (!bodyComp && !clad) {
+    visualText = await runGeminiPhotoFallback();
+  }
   if (!bodyComp && bodyCompResult.status === "rejected") console.warn("FORMA BodyComp unavailable:", bodyCompResult.reason);
   if (!clad && cladResult.status === "rejected") console.warn("FORMA Clad unavailable:", cladResult.reason);
 
   if (!bodyComp && !clad) {
     state.scanResult = visualText ? {
       visualFallback: { text: visualText, imageCount: Number(hasFront) + Number(hasSide) },
+      captureQuality: captureQualityFromBodyComp,
       analysisProvider: "Gemini",
       engines: { bodyComp: "unavailable", clad: "unavailable", gemini: "completed" },
       createdAt: new Date().toISOString()
@@ -215,6 +218,7 @@ async function runBodyScan() {
   if (!bodyComp && !clad) {
     state.scanResult = visualText ? {
       visualFallback: { text: visualText, imageCount: Number(hasFront) + Number(hasSide) },
+      captureQuality: captureQualityFromBodyComp,
       analysisProvider: "Gemini",
       engines: { bodyComp: "unavailable", clad: "unavailable", gemini: "completed" },
       createdAt: new Date().toISOString()
@@ -306,6 +310,7 @@ new_start_body = '''async function startBodyAnalysis() {
     updatePosePairSummary();
     await runBodyScan();
     saveFormaScanHistory(state.scanResult);
+    renderFormaScanHistory();
   } catch (error) {
     console.error("FORMA scan orchestration failed:", error);
     const visualFallbackDone = await runGeminiPhotoFallback();
