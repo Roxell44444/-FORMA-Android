@@ -70,7 +70,46 @@ function readImageDataUrl(value) {
 }
 
 async function readJson(request) {
-  try { return await request.json(); } catch { throw new Error("La solicitud no es válida."); }
+  const reader = request.body?.getReader();
+  if (!reader) throw new Error("La solicitud no contiene datos JSON.");
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new Error("La solicitud supera el tamaño permitido.");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === "La solicitud supera el tamaño permitido.") throw error;
+    throw new Error("No se pudo leer la solicitud.");
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error("La solicitud no es válida.");
+  }
+}
+
+async function isRateLimited(request, env, bindingName, route) {
+  const limiter = env[bindingName];
+  if (!limiter) return false;
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  try {
+    const result = await limiter.limit({ key: ip + ":" + route });
+    return result?.success !== true;
+  } catch {
+    // Keep the service available if Cloudflare's approximate limiter has a transient error.
+    return false;
+  }
 }
 
 function extractInteractionText(interaction) {
@@ -88,20 +127,26 @@ async function generateGemini(env, systemInstruction, input) {
   if (!env.GEMINI_API_KEY) {
     return { error: "El Coach inteligente todavía no está configurado.", status: 503 };
   }
-  const response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": env.GEMINI_API_KEY
-    },
-    body: JSON.stringify({
-      model: env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-      system_instruction: systemInstruction,
-      generation_config: { temperature: 0.45 },
-      store: false,
-      input: input
-    })
-  });
+  let response;
+  try {
+    response = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": env.GEMINI_API_KEY
+      },
+      signal: AbortSignal.timeout(25000),
+      body: JSON.stringify({
+        model: env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+        system_instruction: systemInstruction,
+        generation_config: { temperature: 0.45 },
+        store: false,
+        input: input
+      })
+    });
+  } catch {
+    return { error: "El servicio inteligente no respondió a tiempo. Inténtalo de nuevo.", status: 502 };
+  }
   if (!response.ok) return { error: "El servicio inteligente no pudo responder ahora.", status: 502 };
   const interaction = await response.json();
   const text = extractInteractionText(interaction);
@@ -161,11 +206,17 @@ async function startCladJob(request, env) {
   form.append("photo", new Blob([image.bytes], { type: image.mimeType }), "forma-front.jpg");
   form.append("height_cm", String(heightCm));
 
-  const upstream = await fetch(base + "/v1/body/from-photo", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + env.CLAD_API_KEY },
-    body: form
-  });
+  let upstream;
+  try {
+    upstream = await fetch(base + "/v1/body/from-photo", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + env.CLAD_API_KEY },
+      signal: AbortSignal.timeout(25000),
+      body: form
+    });
+  } catch {
+    return errorMessage(request, env, "Clad no respondió a tiempo. Puedes continuar con el resto del análisis.", 502);
+  }
   if (upstream.status === 401 || upstream.status === 403) {
     return errorMessage(request, env, "La clave de Clad no es válida o no tiene acceso.", 502);
   }
@@ -202,10 +253,16 @@ async function pollCladJob(request, env) {
     return errorMessage(request, env, error.message, 400);
   }
 
-  const upstream = await fetch(pollUrl, {
-    method: "GET",
-    headers: { "Authorization": "Bearer " + env.CLAD_API_KEY }
-  });
+  let upstream;
+  try {
+    upstream = await fetch(pollUrl, {
+      method: "GET",
+      headers: { "Authorization": "Bearer " + env.CLAD_API_KEY },
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch {
+    return errorMessage(request, env, "No se pudo consultar Clad a tiempo.", 502);
+  }
   if (upstream.status === 401 || upstream.status === 403) {
     return errorMessage(request, env, "La clave de Clad no es válida o no tiene acceso.", 502);
   }
@@ -256,6 +313,12 @@ export default {
     if (request.method !== "POST") return errorMessage(request, env, "Ruta no disponible.", 404);
     const contentLength = Number(request.headers.get("content-length") || 0);
     if (contentLength > MAX_BODY_BYTES) return errorMessage(request, env, "La solicitud supera el tamaño permitido.", 413);
+
+    const rateBinding = url.pathname === "/api/coach" ? "COACH_RATE_LIMITER" :
+      ["/api/scan-fallback", "/api/clad/scan", "/api/clad/poll"].includes(url.pathname) ? "SCAN_RATE_LIMITER" : null;
+    if (rateBinding && await isRateLimited(request, env, rateBinding, url.pathname)) {
+      return errorMessage(request, env, "Has alcanzado temporalmente el límite de solicitudes. Espera un momento y vuelve a intentarlo.", 429);
+    }
 
     if (url.pathname === "/api/coach") {
       let body;
