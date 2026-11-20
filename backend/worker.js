@@ -308,7 +308,7 @@ export default {
         ok: true,
         geminiConfigured: Boolean(env.GEMINI_API_KEY),
         cladConfigured: Boolean(env.CLAD_API_KEY),
-        rateLimitsConfigured: Boolean(env.COACH_RATE_LIMITER && env.SCAN_RATE_LIMITER)
+        rateLimitsConfigured: Boolean(env.COACH_RATE_LIMITER && env.SCAN_RATE_LIMITER && env.CLAD_POLL_RATE_LIMITER)
       });
     }
     if (request.method !== "POST") return errorMessage(request, env, "Ruta no disponible.", 404);
@@ -316,7 +316,8 @@ export default {
     if (contentLength > MAX_BODY_BYTES) return errorMessage(request, env, "La solicitud supera el tamaño permitido.", 413);
 
     const rateBinding = url.pathname === "/api/coach" ? "COACH_RATE_LIMITER" :
-      ["/api/scan-fallback", "/api/clad/scan", "/api/clad/poll"].includes(url.pathname) ? "SCAN_RATE_LIMITER" : null;
+      url.pathname === "/api/clad/poll" ? "CLAD_POLL_RATE_LIMITER" :
+      ["/api/scan-fallback", "/api/clad/scan"].includes(url.pathname) ? "SCAN_RATE_LIMITER" : null;
     if (rateBinding && await isRateLimited(request, env, rateBinding, url.pathname)) {
       return errorMessage(request, env, "Has alcanzado temporalmente el límite de solicitudes. Espera un momento y vuelve a intentarlo.", 429);
     }
