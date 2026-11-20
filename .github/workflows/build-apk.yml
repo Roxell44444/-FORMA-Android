@@ -82,16 +82,17 @@ jobs:
           python3 scripts/forma-integrate.py
           python3 scripts/forma-clad.py
           node --check backend/worker.js
+          npm --prefix backend test
           python3 - <<'PY'
           import json
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.4.0"
+          data["version"] = "1.5.0"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
-          s = g.read_text(encoding="utf-8").replace('versionName "1.2.0"', 'versionName "1.4.0"')
-          s = s.replace("versionCode 2", "versionCode 4")
+          s = g.read_text(encoding="utf-8").replace('versionName "1.2.0"', 'versionName "1.5.0"')
+          s = __import__("re").sub(r"versionCode\\s+\\d+", "versionCode 5", s)
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
@@ -144,7 +145,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build FORMA 1.4 APK
+      - name: Build FORMA 1.5 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -153,6 +154,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.4.0-debug-apk
+          name: FORMA-1.5.0-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
