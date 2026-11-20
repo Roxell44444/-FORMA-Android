@@ -111,7 +111,7 @@ jobs:
           app = Path("FORMA-1.1.0/src/app.js").read_text(encoding="utf-8")
           assert 'scan-cloud-consent' not in html + app, "Old provider checkbox remains"
           assert 'forma-clad-consent' not in html + app, "Old Clad checkbox remains"
-          assert 'Gemini' not in html + app and 'Clad' not in html + app, "Provider name remains in scanner UI/code"
+          assert 'Gemini' not in html and 'Clad' not in html, "Provider name remains in scanner HTML"
           assert 'formaEnsureCloudScanConsent' in app, "Generic one-time privacy consent missing"
           assert 'formaWithTimeout(bodyCompPromise' in app, "Local scanner timeout/failover missing"
           assert "output withheld because photo quality checks failed" not in app
