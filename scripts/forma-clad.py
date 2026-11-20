@@ -57,7 +57,7 @@ async function runCladPhotoScan(imageElement) {
   const job = await startCladPhotoJob({ frontImage, heightCm });
   if (!job.jobId || !job.pollUrl) throw new Error("No se pudo iniciar la reconstrucción 3D.");
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 180000) {
+  while (Date.now() - startedAt < 60000) {
     const result = await pollCladPhotoJob({ jobId: job.jobId, pollUrl: job.pollUrl });
     if (result.status === "completed") {
       return {
@@ -117,8 +117,8 @@ async function runBodyScan() {
       ))
     : Promise.resolve(null);
 
-  // Clad se intenta con la primera imagen disponible, frontal o lateral.
-  const imageForClad = hasFront ? frontImage : sideImage;
+  // Clad espera una toma frontal. Si solo hay una vista lateral, Gemini la analiza sin forzar medidas.
+  const imageForClad = hasFront ? frontImage : null;
   const canRunClad = Boolean(imageForClad) &&
     Number(profile.height) >= 140 && Number(profile.height) <= 220;
   const cladPromise = canRunClad ? runCladPhotoScan(imageForClad) : Promise.resolve(null);
