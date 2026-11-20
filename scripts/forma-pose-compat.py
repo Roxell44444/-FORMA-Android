@@ -30,14 +30,14 @@ export async function createPoseLandmarker() {
       try {
         ({ FilesetResolver, PoseLandmarker } = await import(BUNDLE_URL));
       } catch (error) {
-        throw new Error('No se pudo cargar el módulo local de MediaPipe. ' + describePoseError(error), { cause: error });
+        const wrapped = new Error('No se pudo cargar el módulo local de MediaPipe. ' + describePoseError(error));\n        wrapped.cause = error;\n        throw wrapped;
       }
 
       let vision;
       try {
         vision = await FilesetResolver.forVisionTasks(WASM_URL);
       } catch (error) {
-        throw new Error('No se pudieron inicializar los archivos WASM locales de MediaPipe. ' + describePoseError(error), { cause: error });
+        const wrapped = new Error('No se pudieron inicializar los archivos WASM locales de MediaPipe. ' + describePoseError(error));\n        wrapped.cause = error;\n        throw wrapped;
       }
 
       const attempts = [
