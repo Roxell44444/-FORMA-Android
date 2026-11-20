@@ -65,7 +65,8 @@ elif sequential_visual in app:
     app = once(
         app,
         sequential_visual,
-        '''    if ($('#scan-cloud-consent')?.checked === true) {
+        '''    const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
+    if (cloudAnalysisAllowed) {
       visualText = await runGeminiPhotoFallback();
     }''',
         "Gemini explicit opt-in",
