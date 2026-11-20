@@ -3,7 +3,7 @@ import { loadModels, analyse } from "../../vendor/bodycomp/pipeline.js";
 
 const VISION_BASE = new URL("../../vendor/mediapipe/", import.meta.url).href;
 const SEGMENTER_MODEL = new URL("../../models/bodycomp/selfie_multiclass.tflite", import.meta.url).href;
-const BODYCOMP_MODELS = "https://cdn.jsdelivr.net/gh/rishabcv-eng/bodycomp@9b4f73469f9b099809ddb19a6e23cb346072e4f4/app/public/models";
+const BODYCOMP_MODELS = new URL("../../models/bodycomp/", import.meta.url).href;
 const PERSON_CLASSES = [1, 2, 3, 4, 5];
 const MAX_EDGE = 900;
 
