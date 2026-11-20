@@ -63,3 +63,10 @@ jobs:
           grep -qi '^access-control-allow-methods:.*POST' /tmp/forma-preflight.headers
           grep -qi '^access-control-allow-headers:.*Content-Type' /tmp/forma-preflight.headers
           echo "Worker health and Android CORS preflight verified."
+          curl --fail --silent --show-error -o /tmp/forma-coach.json \
+            -X POST "$URL/api/coach" \
+            -H 'Origin: https://appassets.androidplatform.net' \
+            -H 'Content-Type: application/json' \
+            --data '{"message":"Responde únicamente: OK","context":{}}'
+          grep -q '"text":' /tmp/forma-coach.json
+          echo "Live Gemini Coach request verified."
