@@ -83,25 +83,6 @@ function compareScanEngines(bodyCompMeasurements, cladMeasurements) {
   return output;
 }
 
-async function runGeminiPhotoFallback() {
-  try {
-    const candidates = [
-      { label: "Primera fotografía", image: $('img', $('#slot-front')) },
-      { label: "Segunda fotografía", image: $('img', $('#slot-side')) }
-    ].filter(item => item.image && item.image.complete && item.image.naturalWidth > 0);
-    if (!candidates.length) return null;
-    const images = await Promise.all(candidates.map(async item => ({
-      label: item.label,
-      image: await imageToCompactDataUrl(item.image)
-    })));
-    const text = await askFormaVisualFallback({ images });
-    return typeof text === "string" && text.trim() ? text.trim() : null;
-  } catch (error) {
-    console.warn("FORMA visual analysis unavailable:", error);
-    return null;
-  }
-}
-
 async function runBodyScan() {
   if (state.profile && state.profile.age < 18) {
     $('#capture-status').textContent = "Para menores, FORMA ofrece orientación general de bienestar, no estimaciones de composición corporal.";
