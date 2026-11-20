@@ -59,7 +59,33 @@ test("Gemini Coach uses Interactions and disables server-side conversation stora
   }
 });
 
-test("Clad photo job sends only the frontal photo and height, then polls the same provider host", async () => {
+test("Gemini visual fallback analyzes a single arbitrary photo", async () => {
+  const originalFetch = globalThis.fetch;
+  let observed;
+  globalThis.fetch = async (url, options) => {
+    observed = JSON.parse(options.body);
+    return Response.json({
+      status: "completed",
+      steps: [{ type: "model_output", content: [{ type: "text", text: "LECTURA VISUAL\\nSe observa la zona visible." }] }]
+    });
+  };
+  try {
+    const image = "data:image/jpeg;base64," + btoa("partial-body-photo");
+    const response = await worker.fetch(
+      request("/api/scan-fallback", { images: [{ label: "Foto subida", image }] }),
+      { ...ENV, GEMINI_API_KEY: "test-gemini-key" }
+    );
+    assert.equal(response.status, 200);
+    assert.match((await response.json()).text, /LECTURA VISUAL/);
+    assert.equal(observed.input.filter(item => item.type === "image").length, 1);
+    assert.match(observed.system_instruction, /Analiza siempre lo que esté visible/);
+    assert.equal(observed.store, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+testAnchor
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
