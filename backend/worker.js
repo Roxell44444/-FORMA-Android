@@ -1,4 +1,4 @@
-const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 const DEFAULT_CLAD_BASE = "https://api.clad.you";
 const MAX_BODY_BYTES = 12_000_000;
 const MAX_IMAGE_CHARS = 7_000_000;
