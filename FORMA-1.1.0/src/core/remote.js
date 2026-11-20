@@ -7,7 +7,7 @@ async function apiBaseUrl() {
         if (!response.ok) throw new Error("La conexión inteligente no está configurada.");
         return response.json();
       })
-      .then(config => String(config.apiBaseUrl || "").trim().replace(/\/+$/, ""));
+      .then(config => String(config.apiBaseUrl || "").trim().replace(/\/+$/, ""))
       .catch(error => {
         configPromise = null;
         throw error;
