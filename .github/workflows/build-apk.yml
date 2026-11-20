@@ -38,6 +38,14 @@ jobs:
             echo "--- $f ---"
             sed -n '1,260p' "$f"
           done
+          echo '=== APP SCAN FLOW ==='
+          sed -n '190,430p' FORMA-1.1.0/src/app.js
+          echo '=== APP PLAN + COACH FLOW ==='
+          sed -n '480,710p' FORMA-1.1.0/src/app.js
+          echo '=== METRICS PHOTO COMPOSITION ==='
+          sed -n '110,185p' FORMA-1.1.0/src/core/metrics.js
+          echo '=== TEST FILES ==='
+          find FORMA-1.1.0 -type f -path '*test*' | sort
           echo '=== SCAN / COACH / PLAN REFERENCES ==='
           grep -RniE 'coach|gemini|scan|analyse|analy[sz]|bodycomp|plan|photo|camera' FORMA-1.1.0/src --include='*.js' | head -300
 
