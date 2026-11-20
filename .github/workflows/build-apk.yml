@@ -11,6 +11,7 @@ on:
       - 'scripts/forma-clad.py'
       - 'scripts/forma-pro.py'
       - 'scripts/forma-suite.py'
+      - 'scripts/forma-scan-fix.py'
       - 'assets/backend-config.json'
       - 'backend/worker.js'
       - 'backend/wrangler.toml'
@@ -103,17 +104,18 @@ jobs:
           python3 scripts/forma-clad.py
           python3 scripts/forma-pro.py
           python3 scripts/forma-suite.py
+          python3 scripts/forma-scan-fix.py
           python3 - <<'PY'
           from pathlib import Path
           html = Path("FORMA-1.1.0/index.html").read_text(encoding="utf-8")
           app = Path("FORMA-1.1.0/src/app.js").read_text(encoding="utf-8")
-          assert html.count('id="scan-cloud-consent"') == 1, "Gemini photo consent must appear exactly once"
-          assert 'id="forma-gemini-consent"' not in html, "Obsolete duplicate Gemini consent remains"
-          assert html.count('id="forma-clad-consent"') == 1, "Clad consent must appear exactly once"
-          assert "const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;" in app
-          assert "if (!$('#scan-cloud-consent')?.checked) return null;" in app
+          assert 'scan-cloud-consent' not in html + app, "Old provider checkbox remains"
+          assert 'forma-clad-consent' not in html + app, "Old Clad checkbox remains"
+          assert 'Gemini' not in html + app and 'Clad' not in html + app, "Provider name remains in scanner UI/code"
+          assert 'formaEnsureCloudScanConsent' in app, "Generic one-time privacy consent missing"
+          assert 'formaWithTimeout(bodyCompPromise' in app, "Local scanner timeout/failover missing"
           assert "output withheld because photo quality checks failed" not in app
-          print("Scanner consent and permissive photo-quality invariants verified.")
+          print("Scanner automatic failover, generic privacy consent and UI invariants verified.")
           PY
           node --check backend/worker.js
           npm --prefix backend test
