@@ -307,7 +307,8 @@ export default {
       return json(request, env, {
         ok: true,
         geminiConfigured: Boolean(env.GEMINI_API_KEY),
-        cladConfigured: Boolean(env.CLAD_API_KEY)
+        cladConfigured: Boolean(env.CLAD_API_KEY),
+        rateLimitsConfigured: Boolean(env.COACH_RATE_LIMITER && env.SCAN_RATE_LIMITER)
       });
     }
     if (request.method !== "POST") return errorMessage(request, env, "Ruta no disponible.", 404);
@@ -322,7 +323,7 @@ export default {
 
     if (url.pathname === "/api/coach") {
       let body;
-      try { body = await readJson(request); } catch (error) { return errorMessage(request, env, error.message, 400); }
+      try { body = await readJson(request); } catch (error) { return errorMessage(request, env, error.message, error.message === "La solicitud supera el tamaño permitido." ? 413 : 400); }
       const message = String(body.message || "").trim();
       if (!message || message.length > 500) return errorMessage(request, env, "La pregunta debe tener entre 1 y 500 caracteres.", 400);
       const context = body.context && typeof body.context === "object" ? body.context : {};
@@ -369,11 +370,11 @@ export default {
 
     if (url.pathname === "/api/clad/scan") {
       try { return await startCladJob(request, env); }
-      catch { return errorMessage(request, env, "No se pudo iniciar la reconstrucción 3D.", 502); }
+      catch (error) { return errorMessage(request, env, error.message === "La solicitud supera el tamaño permitido." ? error.message : "No se pudo iniciar la reconstrucción 3D.", error.message === "La solicitud supera el tamaño permitido." ? 413 : 502); }
     }
     if (url.pathname === "/api/clad/poll") {
       try { return await pollCladJob(request, env); }
-      catch { return errorMessage(request, env, "No se pudo consultar la reconstrucción 3D.", 502); }
+      catch (error) { return errorMessage(request, env, error.message === "La solicitud supera el tamaño permitido." ? error.message : "No se pudo consultar la reconstrucción 3D.", error.message === "La solicitud supera el tamaño permitido." ? 413 : 502); }
     }
     return errorMessage(request, env, "Ruta no disponible.", 404);
   }
