@@ -352,6 +352,7 @@ new_render = '''function renderScanResult() {
   $('#view-personal-plan')?.classList.remove("hidden");
 }
 
+'''
 app = app[:render_start] + new_render + app[render_end:]
 
 # The unified scanner privacy notice is inserted by forma-integrate.py.
