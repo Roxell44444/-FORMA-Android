@@ -47,16 +47,31 @@ index_path.write_text(html, encoding="utf-8")
 
 # Improve the orchestration: each engine is independent and consent-gated.
 app = app_path.read_text(encoding="utf-8")
-app = once(
-    app,
-    '  const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());',
-    '''  const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
-  const cladAnalysisAllowed = $('#forma-clad-consent')?.checked === true;
+# Enforce Gemini photo consent regardless of whether the current scanner
+# starts the visual engine in parallel or invokes it after numeric engines fail.
+parallel_visual = '  const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());'
+sequential_visual = '    visualText = await runGeminiPhotoFallback();'
+if parallel_visual in app:
+    app = once(
+        app,
+        parallel_visual,
+        '''  const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
   const visualPromise = cloudAnalysisAllowed
     ? Promise.resolve().then(() => runGeminiPhotoFallback())
     : Promise.resolve(null);''',
-    "Gemini explicit opt-in",
-)
+        "Gemini explicit opt-in",
+    )
+elif sequential_visual in app:
+    app = once(
+        app,
+        sequential_visual,
+        '''    if ($('#scan-cloud-consent')?.checked === true) {
+      visualText = await runGeminiPhotoFallback();
+    }''',
+        "Gemini explicit opt-in",
+    )
+elif "$('#scan-cloud-consent')?.checked === true" not in app:
+    raise SystemExit("Gemini opt-in is not enforced in the scanner code.")
 old_clad_gate = '''  const canRunClad = Boolean(imageForClad) &&
     Number(profile.height) >= 140 && Number(profile.height) <= 220;'''
 if old_clad_gate in app:
