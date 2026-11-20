@@ -92,7 +92,8 @@ jobs:
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8").replace('versionName "1.2.0"', 'versionName "1.5.0"')
-          s = __import__("re").sub(r"versionCode\\s+\\d+", "versionCode 5", s)
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 5", s)
+          assert "versionCode 5" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
