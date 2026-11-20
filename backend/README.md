@@ -32,8 +32,8 @@ Las claves se usan únicamente en el workflow de despliegue para crear secretos 
 
 El Worker comprueba el origen de la aplicación Android, limita el tamaño del cuerpo de las solicitudes y aplica límites de solicitudes mediante bindings de Cloudflare:
 
-- Coach: 20 solicitudes por minuto.
-- Inicio de escáner / fallback / inicio de Clad: 5 solicitudes por minuto.
+- Coach: 30 solicitudes por minuto.
+- Inicio de escáner / fallback / inicio de Clad: 12 solicitudes por minuto.
 - Polling de Clad: 40 solicitudes por minuto para no cortar los trabajos asíncronos.
 
 Los contadores de Cloudflare son aproximados y se aplican por ubicación; pueden permitir solicitudes por encima del umbral. Son una protección básica frente al abuso, no autenticación ni límites estrictos globales. Para una aplicación pública a escala, se debe añadir identidad de usuario y un limitador estricto si el coste lo requiere. CORS tampoco es autenticación.
