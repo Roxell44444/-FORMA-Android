@@ -17,7 +17,7 @@ if n != 1: raise SystemExit("Pediatric body measurement panel not found.")
 scan_button = '              <button class="button button-primary full-width analyze-button" id="analyze-body-scan" disabled>Analizar mi físico</button>'
 scan_consent = '''              <p class="scan-privacy-note">El análisis local se realiza en el teléfono. Puedes activar por separado los servicios externos opcionales.</p>
               <label class="external-consent">
-                <input id="forma-gemini-consent" type="checkbox">
+                <input id="scan-cloud-consent" type="checkbox">
                 <span><strong>Permitir análisis visual con Gemini</strong><small>Cuando el motor local no pueda dar un resultado, las fotos seleccionadas se enviarán a Google Gemini para describir lo que se ve. Desactivado por defecto.</small></span>
               </label>
               <label class="external-consent">
@@ -305,7 +305,7 @@ new_scan = '''async function imageToCompactDataUrl(image) {
 
 async function runGeminiPhotoFallback() {
   // El envío de fotografías a Gemini requiere consentimiento explícito del usuario.
-  if (!$('#forma-gemini-consent')?.checked) return null;
+  if (!$('#scan-cloud-consent')?.checked) return null;
   // Gemini analiza las fotos que existan, incluso si solo se ha cargado una.
   try {
     const images = [];
