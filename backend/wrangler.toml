@@ -4,3 +4,4 @@ compatibility_date = "2026-11-20"
 
 [vars]
 GEMINI_MODEL = "gemini-3.8-flash"
+ALLOWED_ORIGINS = "https://appassets.androidplatform.net"
