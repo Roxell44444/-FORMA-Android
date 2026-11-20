@@ -399,7 +399,7 @@ history_new = """    bodyFatHigh: finiteOrNull(composition?.bodyFatHigh),
 if history_old not in app:
     raise SystemExit("Could not extend the saved scan history fields.")
 app = app.replace(history_old, history_new, 1)
-suite_context_pattern = r'latestScan: latest \\? \\{.*?\\} : null,'
+suite_context_pattern = r'latestScan: latest \? \{.*?\} : null,'
 suite_context_new = """latestScan: latest ? {
       source: "Análisis corporal",
       bodyFatPercent: latest.bodyFatPercent,
