@@ -161,7 +161,7 @@ async function runGeminiPhotoFallback() {
     renderScanResult();
     renderPlan();
     renderDiet();
-    $('#capture-status').textContent = 'Se ha generado una orientación visual aproximada. No se generaron medidas ni porcentajes corporales.';
+    $('#capture-status').textContent = 'Respaldo visual completado. Revisa si las fotos son aptas; esta orientación no sustituye las mediciones del escáner.';
     $('#pose-pair-summary').textContent = 'Para obtener medidas, mejora las fotos y vuelve a intentarlo.';
     toast('Orientación visual completada. No es una medición corporal.');
     return true;
