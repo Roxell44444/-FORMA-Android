@@ -31,6 +31,58 @@ test("rejects browser origins that are not explicitly allowed", async () => {
   assert.equal(response.status, 403);
 });
 
+test("rate limiting can reject Coach requests before calling Gemini", async () => {
+  let calls = 0;
+  const limitedEnv = {
+    ...ENV,
+    COACH_RATE_LIMITER: {
+      async limit(input) {
+        calls++;
+        assert.match(input.key, /203\\.0\\.113\\.10/);
+        assert.match(input.key, /api\\/coach/);
+        return { success: false };
+      }
+    }
+  };
+  const response = await worker.fetch(
+    request("/api/coach", { message: "Hola" }, "POST", { "CF-Connecting-IP": "203.0.113.10" }),
+    limitedEnv
+  );
+  assert.equal(response.status, 429);
+  assert.equal(calls, 1);
+});
+
+test("Clad polling has a separate limit so normal polling does not consume scan-start quota", async () => {
+  let scanCalls = 0;
+  let pollCalls = 0;
+  const env = {
+    ...ENV,
+    SCAN_RATE_LIMITER: { async limit() { scanCalls++; return { success: false }; } },
+    CLAD_POLL_RATE_LIMITER: { async limit(input) {
+      pollCalls++;
+      assert.match(input.key, /api\\/clad\\/poll/);
+      return { success: true };
+    } }
+  };
+  const response = await worker.fetch(
+    request("/api/clad/poll", { jobId: "job_123" }, "POST", { "CF-Connecting-IP": "203.0.113.11" }),
+    env
+  );
+  assert.equal(response.status, 503); // Clad is optional and no key is configured in this test.
+  assert.equal(scanCalls, 0);
+  assert.equal(pollCalls, 1);
+});
+
+test("rejects oversized request bodies before parsing JSON", async () => {
+  const req = new Request("https://forma.example/api/coach", {
+    method: "POST",
+    headers: { Origin: ORIGIN, "Content-Type": "application/json", "Content-Length": "12000001" },
+    body: "{}"
+  });
+  const response = await worker.fetch(req, ENV);
+  assert.equal(response.status, 413);
+});
+
 test("Gemini Coach uses Interactions and disables server-side conversation storage", async () => {
   const originalFetch = globalThis.fetch;
   let observed;
