@@ -289,9 +289,7 @@ new_render = '''function renderScanResult() {
 '''
 app = app[:render_start] + new_render + app[render_end:]
 
-# Add Clad consent style if the original style step wasn't rerun.
-if "clad-scan-consent" not in html:
-    raise SystemExit("Clad consent did not persist in index.html.")
+# The unified scanner privacy notice is inserted by forma-integrate.py.
 app_path.write_text(app, encoding="utf-8")
 
 # Include all new code in syntax checks.
