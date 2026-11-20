@@ -77,7 +77,7 @@ jobs:
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
           data["version"] = "1.4.0"
-          p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8")
+          p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8").replace('versionName "1.2.0"', 'versionName "1.4.0"')
           s = s.replace("versionCode 2", "versionCode 4")
