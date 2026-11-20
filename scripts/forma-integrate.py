@@ -118,6 +118,149 @@ body { background:var(--bg) !important; color:var(--text) !important; }
 .appearance-close { display:block; width:100%; margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--panel-2); color:var(--text); }
 """
 
+css += """
+/* FORMA 1.6 · premium visual system */
+:root {
+  color-scheme: dark;
+  --bg:#090e13;
+  --panel:#111922;
+  --panel-2:#18232d;
+  --line:rgba(181,205,201,.13);
+  --text:#f2f7f5;
+  --muted:#9aaba8;
+  --green:#b7ee4a;
+  --green-2:#83b92d;
+  --mint:#263b2b;
+  --accent:#b7ee4a;
+  --shadow:0 20px 54px rgba(0,0,0,.24);
+}
+html { background:var(--bg); }
+body {
+  color:var(--text) !important;
+  background:
+    radial-gradient(ellipse at 12% -10%,rgba(183,238,74,.09),transparent 34%),
+    radial-gradient(ellipse at 100% 36%,rgba(55,120,105,.09),transparent 32%),
+    linear-gradient(155deg,#090e13 0%,#0c131a 52%,#0a1117 100%) !important;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:-.012em;
+}
+::selection { background:rgba(183,238,74,.28); color:#fff; }
+.sidebar,.topbar,.mobile-nav {
+  background:rgba(11,17,23,.94) !important;
+  border-color:var(--line) !important;
+  backdrop-filter:blur(18px);
+}
+.sidebar { box-shadow:12px 0 40px rgba(0,0,0,.12); }
+.brand strong,.mobile-brand { color:#f5f8f4 !important; letter-spacing:.12em; }
+.brand small,.sidebar-label,.eyebrow,.topbar-context,.nav-item,.mobile-nav-item {
+  color:#91a19e !important;
+}
+.nav-item,.mobile-nav-item { transition:background .2s ease,color .2s ease,transform .2s ease; }
+.nav-item:hover,.nav-item.active {
+  background:linear-gradient(90deg,rgba(183,238,74,.14),rgba(183,238,74,.035)) !important;
+  color:var(--green) !important;
+}
+.nav-item.active { box-shadow:inset 3px 0 var(--green) !important; }
+.topbar { box-shadow:0 8px 30px rgba(0,0,0,.12); }
+.panel,.metric-card,.capture-slot,.capture-panel,.scan-instructions,.summary-tile,.calorie-box,.coach-panel {
+  color:var(--text) !important;
+  background:linear-gradient(145deg,rgba(23,34,44,.97),rgba(15,23,31,.98)) !important;
+  border:1px solid var(--line) !important;
+  border-radius:24px !important;
+  box-shadow:0 14px 34px rgba(0,0,0,.17) !important;
+}
+.panel { padding:clamp(18px,3vw,28px); }
+.metric-card { border-radius:22px !important; }
+.metric-top,.metric-foot,.metric-value small,.muted { color:var(--muted) !important; }
+.metric-symbol,.history-count,.history-values span,.trend-number { color:var(--green) !important; }
+.metric-value,.scan-result-card strong,.summary-tile strong { color:var(--text) !important; }
+.button-primary,.send-button,.user-bubble {
+  color:#10170b !important;
+  background:linear-gradient(120deg,#c8f56a,#9ddc3a) !important;
+  border:0 !important;
+  border-radius:14px !important;
+  box-shadow:0 9px 24px rgba(157,220,58,.16) !important;
+  font-weight:750;
+}
+.button-primary:hover,.send-button:hover { filter:brightness(1.06); transform:translateY(-1px); }
+.button-secondary,.suggested-prompts button {
+  color:#dff5b8 !important;
+  background:rgba(183,238,74,.085) !important;
+  border:1px solid rgba(183,238,74,.2) !important;
+  border-radius:13px !important;
+}
+.button-ghost {
+  color:#c6d1cd !important;
+  background:rgba(255,255,255,.035) !important;
+  border:1px solid var(--line) !important;
+  border-radius:13px !important;
+}
+.notice-neutral,.capture-status,.privacy-note,.nutrition-reminder,.coach-bubble {
+  color:#dce9e3 !important;
+  background:rgba(183,238,74,.07) !important;
+  border:1px solid rgba(183,238,74,.14) !important;
+  border-radius:16px !important;
+}
+.notice-warning { background:rgba(220,155,45,.1) !important; border-color:rgba(220,155,45,.25) !important; }
+.capture-preview { background:#0b1219 !important; border-color:var(--line) !important; border-radius:18px !important; }
+.capture-preview img { border-radius:14px; }
+.workout-day,.macro-row,.history-row,.coach-header,.chat-input-row { border-color:var(--line) !important; }
+.workout-day li,.coach-rule { color:#bdcbc5 !important; }
+.coach-bubble { color:#e6f0eb !important; }
+.user-bubble { color:#10170b !important; }
+.chat-input-row input,input,select,textarea {
+  color:var(--text) !important;
+  background:rgba(7,13,18,.72) !important;
+  border:1px solid rgba(181,205,201,.18) !important;
+  border-radius:13px !important;
+}
+.chat-input-row input:focus,input:focus,select:focus,textarea:focus {
+  border-color:rgba(183,238,74,.58) !important;
+  box-shadow:0 0 0 3px rgba(183,238,74,.08) !important;
+}
+.local-pill,.avatar {
+  color:var(--green) !important;
+  background:rgba(183,238,74,.1) !important;
+  border-color:rgba(183,238,74,.18) !important;
+}
+.mobile-nav {
+  border-top:1px solid var(--line) !important;
+  box-shadow:0 -14px 36px rgba(0,0,0,.26) !important;
+}
+.mobile-nav-item.active { color:var(--green) !important; }
+.mobile-nav-item.active span { background:rgba(183,238,74,.12) !important; }
+.external-consent,.scan-privacy-note,.coach-privacy-note {
+  color:#b5c4bd !important;
+  background:rgba(255,255,255,.035) !important;
+  border-color:rgba(181,205,201,.15) !important;
+  border-radius:14px !important;
+}
+.appearance-launcher {
+  color:#10170b !important;
+  background:linear-gradient(120deg,#c8f56a,#9ddc3a) !important;
+  border:0 !important;
+  box-shadow:0 8px 24px rgba(157,220,58,.18) !important;
+}
+.appearance-card,.appearance-choice,.appearance-close {
+  color:var(--text) !important;
+  background:var(--panel) !important;
+  border-color:var(--line) !important;
+}
+.appearance-choice[aria-pressed=true] { outline-color:var(--green) !important; }
+.content-wrap { max-width:1120px; }
+:where(button,input,select,textarea,[tabindex]):focus-visible {
+  outline:3px solid rgba(183,238,74,.75) !important;
+  outline-offset:3px;
+}
+button:disabled { opacity:.48 !important; filter:saturate(.55); }
+@media(max-width:760px) {
+  .panel { padding:18px !important; }
+  .content-wrap { padding-bottom:110px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+"""
 css_path.write_text(css, encoding="utf-8")
 
 app_path = ROOT / "src/app.js"
@@ -149,25 +292,20 @@ new_scan = '''async function imageToCompactDataUrl(image) {
 }
 
 async function runGeminiPhotoFallback() {
-  // El respaldo visual se ejecuta automáticamente si el análisis principal no está disponible.
+  // Gemini analiza las fotos que existan, incluso si solo se ha cargado una.
   try {
-    const [frontImage, sideImage] = await Promise.all([
-      imageToCompactDataUrl($('img', $('#slot-front'))),
-      imageToCompactDataUrl($('img', $('#slot-side')))
-    ]);
-    const text = await askFormaVisualFallback({ frontImage, sideImage });
-    state.scanResult = { visualFallback: { text }, createdAt: new Date().toISOString() };
-    saveState();
-    renderScanResult();
-    renderPlan();
-    renderDiet();
-    $('#capture-status').textContent = 'Respaldo visual completado. Revisa si las fotos son aptas; esta orientación no sustituye las mediciones del escáner.';
-    $('#pose-pair-summary').textContent = 'Para obtener medidas, mejora las fotos y vuelve a intentarlo.';
-    toast('Orientación visual completada. No es una medición corporal.');
-    return true;
+    const images = [];
+    for (const [slot, label] of [['front', 'Fotografía 1'], ['side', 'Fotografía 2']]) {
+      const image = $('img', $('#slot-' + slot));
+      if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) continue;
+      images.push({ label, image: await imageToCompactDataUrl(image) });
+    }
+    if (!images.length) return null;
+    const report = await askFormaVisualFallback({ images });
+    return typeof report === 'string' && report.trim() ? report.trim() : null;
   } catch (error) {
-    console.warn('FORMA visual fallback unavailable:', error);
-    return false;
+    console.warn('FORMA visual analysis unavailable:', error);
+    return null;
   }
 }
 
@@ -406,7 +544,7 @@ app += r"""
 /* User-selectable appearance palettes. Stored locally; default is monochrome. */
 (() => {
   const palettes = {
-    mono: { label:'Blanco y negro', vars:['#f5f5f5','#ffffff','#ededed','#d5d5d5','#171717','#626262','#262626','#000000','#e8e8e8'] },
+    mono: { label:'Grafito', vars:['#090e13','#111922','#18232d','#2b3945','#f2f7f5','#9aaba8','#b7ee4a','#83b92d','#263b2b'] },
     ocean: { label:'Azul océano', vars:['#eef6fb','#ffffff','#e2eff7','#c7dce9','#142b3b','#587184','#176b91','#0d4f70','#d9edf7'] },
     violet: { label:'Violeta', vars:['#f5f1fb','#ffffff','#eee7f7','#ddd0ee','#2b1b3d','#746481','#7042a0','#512b7c','#eee3fa'] },
     sunset: { label:'Atardecer', vars:['#fff4ed','#ffffff','#ffeadf','#f4d1bd','#3b2118','#80675c','#c45b32','#963e22','#ffe3d5'] },
