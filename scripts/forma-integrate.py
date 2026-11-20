@@ -318,4 +318,18 @@ pkg_path.write_text(pkg, encoding="utf-8")
 
 if not (ROOT / "public/config.json").exists():
     (ROOT / "public/config.json").write_text('{\n  "apiBaseUrl": ""\n}\n', encoding="utf-8")
+# The body-composition model weights are downloaded from the pinned public model
+# distribution at first use. The Android WebView needs INTERNET permission.
+manifest_path = ROOT / "android/app/src/main/AndroidManifest.xml"
+manifest = manifest_path.read_text(encoding="utf-8")
+if "android.permission.INTERNET" not in manifest:
+    if "<application" not in manifest:
+        raise SystemExit("Android manifest has no application element.")
+    manifest = manifest.replace(
+        "<application",
+        '<uses-permission android:name="android.permission.INTERNET" />\\n    <application',
+        1,
+    )
+    manifest_path.write_text(manifest, encoding="utf-8")
+
 print("FORMA integration patch applied.")
