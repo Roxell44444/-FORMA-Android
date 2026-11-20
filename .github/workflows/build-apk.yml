@@ -90,13 +90,13 @@ jobs:
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.5.1"
+          data["version"] = "1.5.2"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8")
-          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.5.1"', s)
-          assert 'versionName "1.5.1"' in s, "Android versionName was not updated"
-          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 6", s)
+          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.5.2"', s)
+          assert 'versionName "1.5.2"' in s, "Android versionName was not updated"
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 7", s)
           assert "versionCode 6" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
@@ -175,6 +175,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.5.1-debug-apk
+          name: FORMA-1.5.2-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
