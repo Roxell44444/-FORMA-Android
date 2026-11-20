@@ -310,9 +310,13 @@ new_start_body = '''async function startBodyAnalysis() {
     renderFormaScanHistory();
   } catch (error) {
     console.error("FORMA scan orchestration failed:", error);
-    const visualFallbackDone = await runGeminiPhotoFallback();
+    const visualFallbackDone = $('#scan-cloud-consent')?.checked === true
+      ? await runGeminiPhotoFallback()
+      : null;
     if (!visualFallbackDone) {
-      $('#capture-status').textContent = "No se pudo completar el análisis con la conexión actual. Comprueba Internet e inténtalo de nuevo.";
+      $('#capture-status').textContent = $('#scan-cloud-consent')?.checked === true
+        ? "No se pudo completar el análisis con la conexión actual. Comprueba Internet e inténtalo de nuevo."
+        : "El análisis local no se completó. El envío opcional a Gemini está desactivado; puedes activarlo para obtener una lectura visual.";
     }
   } finally {
     scanBusy = false;
