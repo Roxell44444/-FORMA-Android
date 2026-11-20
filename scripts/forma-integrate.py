@@ -219,7 +219,7 @@ app = once(
     : safe ? profileAppendicularMuscle(p) : null;""",
     "BodyComp plan metrics",
 )
-app = once(app, '<small>REFERENCIA MUSCULAR</small>', '<small>${muscleEstimate?.bodyComp ? "MASA MAGRA APENDICULAR" : "REFERENCIA MUSCULAR"}</small>', "muscle label")
+app = app.replace('<small>REFERENCIA MUSCULAR</small>', '<small>${muscleEstimate?.bodyComp ? "MASA MAGRA APENDICULAR" : "REFERENCIA MUSCULAR"}</small>', 1)
 app = once(app, "Cifra orientativa basada en medidas corporales.", "${muscleEstimate?.bodyComp ? 'Estimación de masa magra apendicular; no representa todo el músculo.' : 'Cifra orientativa basada en medidas corporales.'}", "muscle description")
 app = once(app, "Perfil menor de 18 años · tutor confirmado", "Perfil menor de 18 años · bienestar y crecimiento", "minor plan label")
 
