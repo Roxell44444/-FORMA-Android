@@ -18,6 +18,14 @@ jobs:
           # MainActivity usa OnBackPressedDispatcher; ComponentActivity proporciona esa API.
           sed -i 's/import android.app.Activity;/import androidx.activity.ComponentActivity;/' FORMA-1.1.0/android/app/src/main/java/com/forma/fitness/MainActivity.java
           sed -i 's/public class MainActivity extends Activity/public class MainActivity extends ComponentActivity/' FORMA-1.1.0/android/app/src/main/java/com/forma/fitness/MainActivity.java
+          # Evita clases duplicadas: Kotlin 1.8 ya integra las extensiones JDK7/JDK8.
+          cat >> FORMA-1.1.0/android/app/build.gradle <<'GRADLE'
+
+          configurations.configureEach {
+              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+              exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+          }
+          GRADLE
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
