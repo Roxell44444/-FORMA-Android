@@ -26,6 +26,13 @@ jobs:
               exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
           }
           GRADLE
+      - name: Upload extracted source for review
+        run: zip -qr FORMA-1.1.0-source.zip FORMA-1.1.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FORMA-1.1.0-source-review
+          path: FORMA-1.1.0-source.zip
+          if-no-files-found: error
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
