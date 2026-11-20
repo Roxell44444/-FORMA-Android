@@ -540,7 +540,8 @@ new_no_result = """    const missingLocalRequirements = [];
       : cloudAnalysisAllowed
         ? "El cálculo local y la lectura complementaria no completaron un resultado."
         : "El cálculo local no obtuvo cifras y el respaldo por internet está desactivado; no se enviaron fotografías.";"""
-if !app.includes(old_no_result)) throw new Error("Could not find no-result scanner messages");
+if old_no_result not in app:
+    raise SystemExit("Could not find no-result scanner messages")
 app = app.replace(old_no_result, new_no_result, 1)
 
 # Make the start action mirror saved settings and retain the last useful error.
