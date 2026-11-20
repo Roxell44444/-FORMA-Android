@@ -124,14 +124,14 @@ jobs:
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.8.0"
+          data["version"] = "1.8.1"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8")
-          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.8.0"', s)
-          assert 'versionName "1.8.0"' in s, "Android versionName was not updated"
-          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 11", s)
-          assert "versionCode 11" in s, "Android versionCode was not updated"
+          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.8.1"', s)
+          assert 'versionName "1.8.1"' in s, "Android versionName was not updated"
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 12", s)
+          assert "versionCode 12" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
@@ -200,7 +200,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build FORMA 1.8.0 APK
+      - name: Build FORMA 1.8.1 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -209,7 +209,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.8.0-debug-apk
+          name: FORMA-1.8.1-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
