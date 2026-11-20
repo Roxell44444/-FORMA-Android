@@ -1,6 +1,12 @@
 name: Deploy FORMA AI backend
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'backend/worker.js'
+      - 'backend/wrangler.toml'
+      - 'backend/worker.test.mjs'
+      - '.github/workflows/deploy-worker.yml'
 permissions:
   contents: read
 jobs:
@@ -40,3 +46,20 @@ jobs:
         run: |
           printf '%s' "$GEMINI_API_KEY" | wrangler secret put GEMINI_API_KEY --config wrangler.toml
           printf '%s' "$CLAD_API_KEY" | wrangler secret put CLAD_API_KEY --config wrangler.toml
+      - name: Verify deployed Worker and Android CORS
+        run: |
+          set -euo pipefail
+          URL="https://formaandroid.roxell-santiesteban.workers.dev"
+          curl --fail --silent --show-error -D /tmp/forma-health.headers -o /tmp/forma-health.json \
+            -H 'Origin: https://appassets.androidplatform.net' "$URL/health"
+          grep -qi '^access-control-allow-origin: https://appassets.androidplatform.net' /tmp/forma-health.headers
+          grep -q '"ok":true' /tmp/forma-health.json
+          curl --fail --silent --show-error -D /tmp/forma-preflight.headers -o /dev/null \
+            -X OPTIONS "$URL/api/coach" \
+            -H 'Origin: https://appassets.androidplatform.net' \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type'
+          grep -qi '^access-control-allow-origin: https://appassets.androidplatform.net' /tmp/forma-preflight.headers
+          grep -qi '^access-control-allow-methods:.*POST' /tmp/forma-preflight.headers
+          grep -qi '^access-control-allow-headers:.*Content-Type' /tmp/forma-preflight.headers
+          echo "Worker health and Android CORS preflight verified."
