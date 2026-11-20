@@ -270,6 +270,63 @@ async function runBodyScan() {
 
 '''
 
+app = app[:start] + new_scan + app[end:]
+
+# Accept one or two photos and make pose analysis best-effort rather than mandatory.
+start_body = app.index("async function startBodyAnalysis() {")
+end_body = app.index("\\nif (analyzeButton)", start_body)
+new_start_body = '''async function startBodyAnalysis() {
+  if (scanBusy) return;
+  if (state.profile && state.profile.age < 18) {
+    toast("El análisis de composición corporal está disponible para adultos.");
+    return;
+  }
+  const availableKinds = VIEW_KEYS.filter(kind => Boolean(capturedUrls[kind]));
+  if (!availableKinds.length) {
+    toast("Añade al menos una fotografía para analizarla.");
+    return;
+  }
+
+  scanBusy = true;
+  updateScanButton();
+  $('#capture-status').textContent = "FORMA está analizando las fotografías disponibles…";
+  try {
+    let detector = null;
+    try {
+      detector = await createPoseLandmarker();
+    } catch (error) {
+      console.warn("FORMA pose detector unavailable; continuing with visual analysis:", error);
+    }
+
+    if (detector) {
+      for (const kind of availableKinds) {
+        const image = $('img', $('#slot-' + kind));
+        try {
+          await analyzeCapture(kind, image, captureSequence[kind], detector);
+        } catch (error) {
+          poseResults[kind] = { status: "rejected", reason: error };
+          console.warn("FORMA could not extract pose from", kind, error);
+        }
+      }
+    }
+
+    updatePosePairSummary();
+    await runBodyScan();
+  } catch (error) {
+    console.error("FORMA scan orchestration failed:", error);
+    const visualFallbackDone = await runGeminiPhotoFallback();
+    if (!visualFallbackDone) {
+      $('#capture-status').textContent = "No se pudo completar el análisis con la conexión actual. Comprueba Internet e inténtalo de nuevo.";
+    }
+  } finally {
+    scanBusy = false;
+    updateScanButton();
+  }
+}
+
+'''
+app = app[:start_body] + new_start_body + app[end_body:]
+
 # Replace result renderer so either engine can provide perimeter estimates.
 render_start = app.index("function renderScanResult() {")
 render_end = app.index("function updateScanButton()", render_start)
@@ -416,11 +473,6 @@ app += """
     scanButton.disabled = !hasAnyPhoto;
     scanButton.textContent = 'Analizar mis fotos';
   };
-  scanButton.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    void runBodyScan();
-  }, true);
   updateScanButton();
 })();
 """
