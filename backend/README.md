@@ -1,55 +1,58 @@
-# FORMA: backend para Gemini y Clad
+# FORMA: backend de IA y servicios opcionales
 
-Las claves de proveedor viven como secretos del Worker de Cloudflare; no se incluyen en la APK.
+FORMA mantiene las claves de proveedor fuera de la APK. Las claves viven como secretos del Worker de Cloudflare.
 
-## Qué procesa cada motor
+## Arquitectura de análisis
 
-- **BodyComp:** segmenta y analiza dos siluetas en el propio dispositivo. En FORMA 1.7 sus pesos estadísticos y el modelo de segmentación se empaquetan en la APK; una vez instalada, la inferencia no necesita descargar los pesos de BodyComp. El perfil adulto y los datos de referencia siguen siendo necesarios para el cálculo.
-- **Gemini Visual:** analiza lo que aparezca en una o dos fotografías, aunque estén recortadas o tengan una pose distinta. Solo recibe las imágenes cuando el usuario activa la casilla de consentimiento específica. Su lectura es cualitativa; no inventa perímetros ni kilos de músculo.
-- **Clad:** intenta reconstruir perímetros ISO a partir de una foto frontal y la estatura. Solo recibe esos datos cuando el usuario activa su casilla independiente. Clad no estima grasa ni masa muscular.
-- **Gemini Coach:** recibe la pregunta y el contexto resumido necesario para personalizar la respuesta. No recibe fotografías desde el apartado Coach.
+- **BodyComp** ejecuta la segmentación y la inferencia de composición corporal en el dispositivo. El código y sus pesos de inferencia se descargan desde una revisión fijada durante la compilación y se incluyen en la APK. En el análisis local, las fotografías no se envían al servidor.
+- **MediaPipe** realiza detección/segmentación local. Si no inicia o no detecta la pose, FORMA sigue intentando el análisis de silueta; las comprobaciones de calidad determinan si se pueden mostrar cifras.
+- **Gemini Visual** es un respaldo opcional. Solo recibe las fotos cuando el usuario activa explícitamente «Permitir análisis visual con Gemini». Analiza una o dos fotos, aunque estén recortadas o tengan una pose distinta, y describe lo que realmente puede observarse. No inventa perímetros ni masa muscular en kg.
+- **Clad** es opcional y está desactivado por defecto. Solo recibe la primera foto y la estatura si el usuario activa el consentimiento específico. Clad puede requerir un plan o cuenta externa y no se utiliza para calcular grasa o músculo.
+- **Gemini Coach** recibe la pregunta enviada. El resumen de perfil y progreso solo se incluye si el usuario activa «Personalizar respuestas con mis datos». No recibe fotografías desde el Coach.
 
-La aplicación puede mostrar resultados parciales: una estimación de composición puede conservarse aunque un motor no haya podido calcular todos los perímetros. Las estimaciones de fotografías no son mediciones clínicas.
+Gemini usa la API de Interactions con `store: false`. Este parámetro desactiva el almacenamiento de la interacción por parte de la API, pero no sustituye la revisión de las condiciones de privacidad del proveedor. El contenido de planes gratuitos puede estar sujeto a condiciones diferentes de los planes de pago. Revisa las condiciones aplicables antes de activar el envío de fotos.
 
-## Privacidad
+## Claves necesarias
 
-- BodyComp se ejecuta localmente y no transmite las fotografías.
-- Gemini y Clad son servicios externos y requieren consentimiento separado en la pantalla del escáner.
-- No se guardan fotografías en el historial local del escáner; solo se conservan fecha, proveedor y métricas resumidas.
-- Gemini usa Interactions con `store: false`. Esto desactiva el almacenamiento de la interacción en esa API; no debe interpretarse como una promesa de que el proveedor no procese el contenido bajo sus condiciones aplicables.
-- Antes de publicar, muestra un aviso de privacidad que identifique a los proveedores, su finalidad y las condiciones de tratamiento vigentes.
+No pegues claves en el chat ni en el código.
 
-## Seguridad y límites del backend
+1. **Gemini**: crea una clave en [Google AI Studio](https://aistudio.google.com/api-keys).
+2. **Cloudflare**: crea una cuenta y un API Token con permiso para desplegar Workers.
+3. **GitHub**: en Settings → Secrets and variables → Actions, añade:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `GEMINI_API_KEY`
+   - `CLAD_API_KEY` (opcional)
 
-El Worker valida el origen de Android WebView, limita cada cuerpo JSON a 12 MB incluso cuando no se envía Content-Length, valida los formatos de imagen, no registra el contenido de las imágenes y aplica timeouts a los servicios externos.
+Clad no es necesario para compilar ni desplegar el flujo gratuito. Si no se configura `CLAD_API_KEY`, la opción de Clad mostrará que el servicio no está disponible, pero BodyComp y Gemini seguirán funcionando según sus permisos.
 
-Se han configurado dos Rate Limiting bindings de Cloudflare:
-- `COACH_RATE_LIMITER`: 30 solicitudes por 60 segundos y dirección IP, por ruta.
-- `SCAN_RATE_LIMITER`: 12 solicitudes por 60 segundos y dirección IP, por ruta.
+Las claves se usan únicamente en el workflow de despliegue para crear secretos de Cloudflare. No se guardan en el código ni en la APK.
 
-Los límites de Cloudflare son aproximados y se aplican por ubicación edge; pueden permitir ráfagas por encima del umbral. No sustituyen la autenticación ni son una protección estricta mundial. CORS tampoco es autenticación.
+## Servicios y límites
 
-## Secretos necesarios
+El Worker comprueba el origen de la aplicación Android, limita el tamaño del cuerpo de las solicitudes y aplica límites de solicitudes mediante bindings de Cloudflare:
 
-En GitHub → Settings → Secrets and variables → Actions:
+- Coach: 20 solicitudes por minuto.
+- Inicio de escáner / fallback / inicio de Clad: 5 solicitudes por minuto.
+- Polling de Clad: 40 solicitudes por minuto para no cortar los trabajos asíncronos.
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-- `GEMINI_API_KEY`
-- `CLAD_API_KEY`
+Los contadores de Cloudflare son aproximados y se aplican por ubicación; pueden permitir solicitudes por encima del umbral. Son una protección básica frente al abuso, no autenticación ni límites estrictos globales. Para una aplicación pública a escala, se debe añadir identidad de usuario y un limitador estricto si el coste lo requiere. CORS tampoco es autenticación.
 
-No pegues estas claves en el código fuente ni en el chat. El workflow las publica como secretos del Worker.
+## Rutas del Worker
 
-## Rutas
+- `POST /api/coach`: pregunta y contexto resumido opcional.
+- `POST /api/scan-fallback`: una o dos imágenes para orientación visual.
+- `POST /api/clad/scan`: inicia una reconstrucción con foto y estatura.
+- `POST /api/clad/poll`: consulta el trabajo asíncrono sin exponer la clave Clad al teléfono.
+- `GET /health`: indica qué secretos y bindings están configurados sin revelar sus valores.
 
-- `POST /api/coach`: pregunta y contexto resumido.
-- `POST /api/scan-fallback`: una o dos fotografías autorizadas para Gemini Visual.
-- `POST /api/clad/scan`: inicia la reconstrucción con foto frontal y estatura.
-- `POST /api/clad/poll`: consulta el trabajo sin revelar la clave de Clad.
-- `GET /health`: informa si los proveedores y los limitadores están configurados, sin revelar claves.
+El Worker valida que las URL de seguimiento de Clad permanezcan en `api.clad.you`. No permite que el teléfono utilice la clave del proveedor directamente.
 
-## Pruebas y límites de validación
+## Pruebas y límites conocidos
 
-El backend tiene pruebas automáticas para CORS, Coach, Gemini con una foto, Clad, validación de las URL de sondeo, límites de solicitudes y cuerpos JSON demasiado grandes.
-
-La prueba de BodyComp compara el modelo con siluetas de referencia publicadas. Es una prueba de paridad del modelo, no una validación clínica ni una prueba de todas las cámaras Android. Antes de distribución comercial deben realizarse pruebas físicas con fotos de consentimiento de personas adultas, revisar los intervalos de error y verificar las licencias de los modelos y datos. El conjunto BodyM tiene licencia CC BY-NC 4.0: no incluir sus fotografías en una aplicación comercial.
+- Las pruebas del Worker simulan llamadas a los proveedores y comprueban validación, CORS, rate limiting y tamaños de carga.
+- La prueba de BodyComp compara la salida del pipeline con siluetas de referencia de su proyecto original.
+- Estas pruebas no sustituyen pruebas de cámara en teléfonos físicos.
+- Una foto única, parcial o con una silueta poco clara puede recibir una lectura visual, pero no necesariamente permite calcular porcentajes o perímetros fiables.
+- La masa magra apendicular no equivale a toda la masa muscular corporal.
+- Antes de publicar comercialmente, se deben conservar los avisos de licencia de BodyComp/MediaPipe y revisar las licencias de los datasets y modelos distribuidos.
