@@ -120,7 +120,8 @@ async function runBodyScan() {
   // Clad espera una toma frontal. Si solo hay una vista lateral, Gemini la analiza sin forzar medidas.
   const imageForClad = hasFront ? frontImage : null;
   const canRunClad = Boolean(imageForClad) &&
-    Number(profile.height) >= 140 && Number(profile.height) <= 220;
+    Number(profile.height) >= 140 && Number(profile.height) <= 220 &&
+    $('#forma-clad-consent')?.checked === true;
   const cladPromise = canRunClad ? runCladPhotoScan(imageForClad) : Promise.resolve(null);
   const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());
 
@@ -128,6 +129,17 @@ async function runBodyScan() {
     bodyCompPromise, cladPromise, visualPromise
   ]);
   let bodyComp = bodyCompResult.status === "fulfilled" ? bodyCompResult.value : null;
+  const captureQualityFromBodyComp = bodyComp?.quality || null;
+  const captureQualityAcceptable = Boolean(
+    captureQualityFromBodyComp?.front?.usable &&
+    captureQualityFromBodyComp?.side?.usable
+  );
+  // Always attempt the model, but do not present numbers from silhouettes that
+  // failed its own pose / framing checks. Gemini can still describe the visible photo.
+  if (bodyComp && !captureQualityAcceptable) {
+    console.warn("FORMA BodyComp output withheld because photo quality checks failed.", captureQualityFromBodyComp);
+    bodyComp = null;
+  }
   const clad = cladResult.status === "fulfilled" ? cladResult.value : null;
   const visualText = visualResult.status === "fulfilled" && typeof visualResult.value === "string"
     ? visualResult.value : null;
@@ -157,7 +169,7 @@ async function runBodyScan() {
   let composition = null;
   let measurements = null;
   let appendicularLeanMassKg = null;
-  let captureQuality = null;
+  let captureQuality = captureQualityFromBodyComp;
   if (bodyComp) {
     const output = bodyComp.output;
     const weight = Number(profile.weight);
@@ -293,6 +305,7 @@ new_start_body = '''async function startBodyAnalysis() {
 
     updatePosePairSummary();
     await runBodyScan();
+    saveFormaScanHistory(state.scanResult);
   } catch (error) {
     console.error("FORMA scan orchestration failed:", error);
     const visualFallbackDone = await runGeminiPhotoFallback();
@@ -457,6 +470,8 @@ app += """
   updateScanButton();
 })();
 """
+app += "\n/* Local scan history: store numeric summaries only, never source photographs. */\nfunction readFormaScanHistory() {\n  try {\n    const value = JSON.parse(localStorage.getItem('forma.scan-history.v1') || '[]');\n    return Array.isArray(value) ? value.filter(item => item && typeof item.date === 'string').slice(-30) : [];\n  } catch { return []; }\n}\n\nfunction saveFormaScanHistory(result) {\n  if (!result || result === null) return;\n  const date = String(result.createdAt || new Date().toISOString());\n  const measurements = result.measurements || {};\n  const composition = result.composition || null;\n  const entry = {\n    date,\n    source: String(result.analysisProvider || 'Gemini'),\n    weightKg: Number.isFinite(Number(state.profile?.weight)) ? Number(state.profile.weight) : null,\n    bodyFatPercent: Number.isFinite(Number(composition?.bodyFatPercent)) ? Number(composition.bodyFatPercent) : null,\n    bodyFatLow: Number.isFinite(Number(composition?.bodyFatLow)) ? Number(composition.bodyFatLow) : null,\n    bodyFatHigh: Number.isFinite(Number(composition?.bodyFatHigh)) ? Number(composition.bodyFatHigh) : null,\n    fatFreeMassKg: Number.isFinite(Number(composition?.fatFreeMassKg)) ? Number(composition.fatFreeMassKg) : null,\n    waistCm: Number.isFinite(Number(measurements.waist?.circumferenceCm)) ? Number(measurements.waist.circumferenceCm) : null,\n    hipCm: Number.isFinite(Number(measurements.hip?.circumferenceCm)) ? Number(measurements.hip.circumferenceCm) : null,\n    chestCm: Number.isFinite(Number(measurements.chest?.circumferenceCm)) ? Number(measurements.chest.circumferenceCm) : null,\n    visualOnly: !composition && !Object.keys(measurements).length\n  };\n  if (entry.visualOnly && !result.visualFallback?.text) return;\n  const history = readFormaScanHistory();\n  if (history.some(item => item.date === entry.date)) return;\n  history.push(entry);\n  try { localStorage.setItem('forma.scan-history.v1', JSON.stringify(history.slice(-30))); }\n  catch (error) { console.warn('FORMA could not save scan history:', error); }\n}\n\nfunction renderFormaScanHistory() {\n  const root = $('#scan-result');\n  if (!root) return;\n  const history = readFormaScanHistory();\n  if (!history.length) return;\n  const previousPanel = root.querySelector('#forma-scan-history');\n  previousPanel?.remove();\n\n  const values = history.filter(item => Number.isFinite(item.bodyFatPercent));\n  let chart = '<p class=\"forma-history-empty\">Todavía no hay suficientes análisis numéricos para dibujar una tendencia.</p>';\n  if (values.length >= 2) {\n    const width = 320, height = 92, pad = 10;\n    const nums = values.map(item => item.bodyFatPercent);\n    const min = Math.min(...nums), max = Math.max(...nums);\n    const span = Math.max(1, max - min);\n    const points = nums.map((value, index) => {\n      const x = pad + index * ((width - pad * 2) / (nums.length - 1));\n      const y = height - pad - ((value - min) / span) * (height - pad * 2);\n      return x.toFixed(1) + ',' + y.toFixed(1);\n    }).join(' ');\n    const last = nums[nums.length - 1];\n    const first = nums[0];\n    const delta = Number((last - first).toFixed(1));\n    const trend = delta === 0 ? 'Sin variación neta' : (delta < 0 ? '↓ ' : '↑ ') + Math.abs(delta).toFixed(1) + ' puntos desde el primer registro';\n    chart = '<svg class=\"forma-history-chart\" viewBox=\"0 0 320 92\" role=\"img\" aria-label=\"Evolución del porcentaje de grasa estimado\">' +\n      '<line x1=\"10\" y1=\"82\" x2=\"310\" y2=\"82\" stroke=\"rgba(255,255,255,.12)\" stroke-width=\"1\"/>' +\n      '<polyline points=\"' + points + '\" fill=\"none\" stroke=\"#b7ee4a\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>' +\n      points.split(' ').map(point => { const p=point.split(','); return '<circle cx=\"' + p[0] + '\" cy=\"' + p[1] + '\" r=\"3.5\" fill=\"#b7ee4a\"/>'; }).join('') +\n      '</svg><div class=\"forma-history-trend\">' + trend + '</div>';\n  }\n\n  const recent = history.slice(-5).reverse();\n  const dateLabel = value => {\n    try { return new Intl.DateTimeFormat('es', { day:'2-digit', month:'short', year:'numeric' }).format(new Date(value)); }\n    catch { return value.slice(0,10); }\n  };\n  const rows = recent.map(item => {\n    const stats = [];\n    if (Number.isFinite(item.bodyFatPercent)) stats.push(item.bodyFatPercent.toFixed(1) + '% grasa est.');\n    if (Number.isFinite(item.weightKg)) stats.push(item.weightKg.toFixed(1) + ' kg');\n    if (Number.isFinite(item.waistCm)) stats.push('Cintura ' + item.waistCm.toFixed(1) + ' cm');\n    if (!stats.length) stats.push('Lectura visual');\n    return '<div class=\"forma-history-row\"><span>' + dateLabel(item.date) + '</span><strong>' + stats.join(' · ') + '</strong></div>';\n  }).join('');\n\n  const section = document.createElement('section');\n  section.id = 'forma-scan-history';\n  section.className = 'forma-scan-history';\n  section.innerHTML = '<div class=\"forma-history-header\"><div><span class=\"composition-eyebrow\">SEGUIMIENTO</span><h3>Evolución corporal</h3><p>Comparación de tus últimos análisis guardados en este teléfono.</p></div><span class=\"forma-history-count\">' + history.length + '</span></div>' +\n    chart +\n    '<div class=\"forma-history-list\">' + rows + '</div>' +\n    '<p class=\"forma-history-note\">Compara tendencias, no diferencias pequeñas entre fotografías. Las estimaciones pueden variar según el encuadre y el modelo.</p>';\n  root.append(section);\n}\n\nconst formaOriginalRenderScanResult = renderScanResult;\nrenderScanResult = function () {\n  formaOriginalRenderScanResult();\n  renderFormaScanHistory();\n};\n"
+
 app_path.write_text(app, encoding="utf-8")
 
 # Include all new code in syntax checks.
@@ -868,6 +883,26 @@ button:disabled { opacity:.45; }
   .composition-ring { width:122px; }
   .composition-legend { flex:1; }
 }
+"""
+
+css += """
+.forma-scan-history {
+  margin-top:22px;
+  padding-top:20px;
+  border-top:1px solid rgba(221,241,229,.12);
+}
+.forma-history-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.forma-history-header h3 { margin:6px 0 4px; color:#f2f8f4; font-size:18px; letter-spacing:-.03em; }
+.forma-history-header p { margin:0; color:#94a89d; font-size:11px; line-height:1.45; }
+.forma-history-count { display:grid; place-items:center; min-width:30px; height:30px; padding:0 8px; border-radius:999px; background:rgba(183,238,74,.1); color:#c8ef91; font-size:12px; font-weight:800; }
+.forma-history-chart { display:block; width:100%; max-height:110px; margin:16px 0 6px; overflow:visible; }
+.forma-history-trend { color:#c8ef91; font-size:11px; font-weight:750; margin-bottom:10px; }
+.forma-history-empty { color:#94a89d; font-size:11px; line-height:1.5; margin:14px 0; }
+.forma-history-row { display:flex; justify-content:space-between; gap:12px; padding:11px 0; border-top:1px solid rgba(221,241,229,.08); }
+.forma-history-row span { color:#94a89d; font-size:11px; flex:0 0 80px; }
+.forma-history-row strong { color:#e7f0e9; font-size:11px; text-align:right; font-weight:650; }
+.forma-history-note { margin:10px 0 0; color:#82978b; font-size:10px; line-height:1.5; }
+@media(max-width:420px) { .forma-history-row { flex-direction:column; gap:4px; } .forma-history-row strong { text-align:left; } }
 """
 css_path.write_text(css, encoding="utf-8")
 
