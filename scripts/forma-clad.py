@@ -274,7 +274,7 @@ app = app[:start] + new_scan + app[end:]
 
 # Accept one or two photos and make pose analysis best-effort rather than mandatory.
 start_body = app.index("async function startBodyAnalysis() {")
-end_body = app.index("\\nif (analyzeButton)", start_body)
+end_body = app.index("\nif (analyzeButton)", start_body)
 new_start_body = '''async function startBodyAnalysis() {
   if (scanBusy) return;
   if (state.profile && state.profile.age < 18) {
