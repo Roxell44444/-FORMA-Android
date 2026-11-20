@@ -25,7 +25,7 @@ namespace_id = "1702"
 
 [[ratelimits]]
 name = "CLAD_POLL_RATE_LIMITER"
-namespace_id = "1464967414003"
+namespace_id = "1703"
 [ratelimits.simple]
 limit = 40
 period = 60
