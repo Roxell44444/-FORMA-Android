@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'FORMA-ANDROID-APK-BUILDER-1.1.0.zip'
+      - 'assets/forma-app-icon.webp'
+      - 'scripts/forma-redesign.py.gz'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -11,14 +13,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Unpack FORMA Android project
+
+      - name: Prepare FORMA 1.2
         run: |
           test -f FORMA-ANDROID-APK-BUILDER-1.1.0.zip
           unzip -q FORMA-ANDROID-APK-BUILDER-1.1.0.zip
-          # MainActivity usa OnBackPressedDispatcher; ComponentActivity proporciona esa API.
+          gzip -dc scripts/forma-redesign.py.gz > scripts/forma-redesign.py
+          python3 scripts/forma-redesign.py
+          cp assets/forma-app-icon.webp FORMA-1.1.0/public/icon.webp
+          mkdir -p FORMA-1.1.0/android/app/src/main/res/drawable-nodpi
+          cp assets/forma-app-icon.webp FORMA-1.1.0/android/app/src/main/res/drawable-nodpi/forma_launcher.webp
+
+      - name: Package on-device body analysis
+        working-directory: FORMA-1.1.0
+        run: |
+          mkdir -p vendor/mediapipe models /tmp/forma-vision-package
+          npm pack @mediapipe/tasks-vision@1.2.3 --pack-destination /tmp/forma-vision-package
+          TARBALL="$(find /tmp/forma-vision-package -maxdepth 1 -type f -name '*.tgz' | head -n 1)"
+          test -n "$TARBALL"
+          tar -xzf "$TARBALL" --strip-components=1 -C vendor/mediapipe
+          test -f vendor/mediapipe/vision_bundle.mjs
+          test -d vendor/mediapipe/wasm
+          curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 20             'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'             --output models/pose_landmarker_lite.task
+          test -s models/pose_landmarker_lite.task
+          mkdir -p android/app/src/main/assets/public
+          cp -a src public vendor models android/app/src/main/assets/public/
+          cp index.html manifest.webmanifest service-worker.js android/app/src/main/assets/public/
+          npm run check
+          npm run build
+
+      - name: Configure Android entry point
+        run: |
           sed -i 's/import android.app.Activity;/import androidx.activity.ComponentActivity;/' FORMA-1.1.0/android/app/src/main/java/com/forma/fitness/MainActivity.java
           sed -i 's/public class MainActivity extends Activity/public class MainActivity extends ComponentActivity/' FORMA-1.1.0/android/app/src/main/java/com/forma/fitness/MainActivity.java
-          # Evita clases duplicadas: Kotlin 1.8 ya integra las extensiones JDK7/JDK8.
           cat >> FORMA-1.1.0/android/app/build.gradle <<'GRADLE'
 
           configurations.configureEach {
@@ -26,34 +53,32 @@ jobs:
               exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
           }
           GRADLE
-      - name: Upload extracted source for review
-        run: zip -qr FORMA-1.1.0-source.zip FORMA-1.1.0
-      - uses: actions/upload-artifact@v4
-        with:
-          name: FORMA-1.1.0-source-review
-          path: FORMA-1.1.0-source.zip
-          if-no-files-found: error
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
       - name: Install Android SDK packages
         run: |
           export ANDROID_HOME=/usr/local/lib/android/sdk
           export ANDROID_SDK_ROOT=$ANDROID_HOME
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Build debug APK
+
+      - name: Build FORMA 1.2 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: gradle --no-daemon assembleDebug
+
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.1.0-debug-apk
+          name: FORMA-1.2.0-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
