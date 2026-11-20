@@ -85,7 +85,7 @@ test("Gemini visual fallback analyzes a single arbitrary photo", async () => {
   }
 });
 
-testAnchor
+test("Clad photo job sends only the frontal photo and height, then polls the same provider host", async () => {
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, options = {}) => {
