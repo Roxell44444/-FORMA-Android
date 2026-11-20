@@ -239,7 +239,7 @@ new_render = '''function renderScanResult() {
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/^\s*\*\s+/gm, '• ')
         .replace(/\s+\*(?=\s|$)/g, '')
-        .replace(/\r?\n/g, '<br>') +
+        .replace(/\\r?\\n/g, '<br>') +
       '</div><small>Esta orientación no es una medición. Solo puede dar un rango visual muy aproximado cuando las dos fotos son aptas. No calcula perímetros ni masa muscular en kg.</small></section>';
     $('#view-personal-plan')?.classList.add('hidden');
     return;
