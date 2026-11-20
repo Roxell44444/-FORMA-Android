@@ -15,11 +15,19 @@ if n != 1: raise SystemExit("Guardian checkbox not found.")
 html, n = re.subn(r'<article class="panel form-panel hidden" id="pediatric-rfm-panel">.*?</article>', '', html, count=1, flags=re.S)
 if n != 1: raise SystemExit("Pediatric body measurement panel not found.")
 scan_button = '              <button class="button button-primary full-width analyze-button" id="analyze-body-scan" disabled>Analizar mi físico</button>'
-scan_consent = '''              <p class="scan-privacy-note">Al iniciar el análisis, tus fotografías podrán procesarse de forma segura para completar las mediciones y ofrecer orientación si el análisis principal no está disponible.</p>
+scan_consent = '''              <p class="scan-privacy-note">El análisis local se realiza en el teléfono. Puedes activar por separado los servicios externos opcionales.</p>
+              <label class="external-consent">
+                <input id="forma-gemini-consent" type="checkbox">
+                <span><strong>Permitir análisis visual con Gemini</strong><small>Cuando el motor local no pueda dar un resultado, las fotos seleccionadas se enviarán a Google Gemini para describir lo que se ve. Desactivado por defecto.</small></span>
+              </label>
+              <label class="external-consent">
+                <input id="forma-clad-consent" type="checkbox">
+                <span><strong>Permitir reconstrucción 3D con Clad</strong><small>Opcional. Se enviará la primera foto y tu estatura a Clad. Puede requerir una cuenta o servicio de pago. Desactivado por defecto.</small></span>
+              </label>
 '''
 html = once(html, scan_button, scan_consent + scan_button, "scanner consent")
 coach_form = '<form id="chat-form" class="chat-input-row">'
-coach_consent = '''<p class="coach-privacy-note">Tus preguntas y los datos relevantes de tu perfil se utilizan para personalizar las respuestas. No se envían fotografías desde esta sección.</p>'''
+coach_consent = '''<label class="external-consent coach-consent"><input id="forma-coach-context-consent" type="checkbox"><span><strong>Personalizar respuestas con mis datos</strong><small>Si lo activas, FORMA enviará a Gemini un resumen de tu perfil y evolución. Tu pregunta se envía al Coach cuando la envías.</small></span></label>'''
 html = once(html, coach_form, coach_consent + coach_form, "coach consent")
 index_path.write_text(html, encoding="utf-8")
 
@@ -27,7 +35,11 @@ css_path = ROOT / "src/ui/styles.css"
 css = css_path.read_text(encoding="utf-8")
 css += '''
 
-.external-consent { display:flex; align-items:flex-start; gap:10px; margin:12px 0; padding:13px 14px; border:1px solid var(--border, rgba(255,255,255,.14)); border-radius:14px; background:var(--surface, rgba(255,255,255,.035)); color:inherit; font-size:13px; line-height:1.45; }
+.external-consent { display:flex; align-items:flex-start; gap:10px; margin:10px 0; padding:12px 14px; border:1px solid var(--border, rgba(255,255,255,.14)); border-radius:14px; background:var(--surface, rgba(255,255,255,.035)); color:inherit; font-size:13px; line-height:1.45; }
+.external-consent input { flex:0 0 auto; width:18px; height:18px; margin:2px 0 0; accent-color:var(--accent, #b7ee4a); }
+.external-consent span { display:grid; gap:4px; }
+.external-consent strong { font-size:12px; }
+.external-consent small { opacity:.78; font-size:11px; line-height:1.45; }
 .external-consent input { flex:0 0 auto; width:18px; height:18px; margin:2px 0 0; accent-color:var(--accent, #c8ff42); }
 .external-consent span { display:grid; gap:4px; }
 .external-consent strong { font-size:13px; }
@@ -292,6 +304,8 @@ new_scan = '''async function imageToCompactDataUrl(image) {
 }
 
 async function runGeminiPhotoFallback() {
+  // El envío de fotografías a Gemini requiere consentimiento explícito del usuario.
+  if (!$('#forma-gemini-consent')?.checked) return null;
   // Gemini analiza las fotos que existan, incluso si solo se ha cargado una.
   try {
     const images = [];
@@ -508,7 +522,9 @@ async function sendCoachMessage(message) {
   try {
     bubble.textContent = await askFormaCoach({
       message,
-      context: state.profile?.age >= 18 ? coachContextForGemini() : { profile: null, latestScan: null, progress: null }
+      context: state.profile?.age >= 18 && $('#forma-coach-context-consent')?.checked
+        ? coachContextForGemini()
+        : { profile: null, latestScan: null, progress: null }
     });
   } catch (error) {
     console.error('FORMA Coach online request failed:', error);
@@ -596,8 +612,8 @@ pkg_path.write_text(pkg, encoding="utf-8")
 
 if not (ROOT / "public/config.json").exists():
     (ROOT / "public/config.json").write_text('{\n  "apiBaseUrl": ""\n}\n', encoding="utf-8")
-# The body-composition model weights are downloaded from the pinned public model
-# distribution at first use. The Android WebView needs INTERNET permission.
+# BodyComp weights are fetched at build time from a pinned model revision and bundled
+# with the app. Network access is needed for remote Gemini/optional Clad services only.
 manifest_path = ROOT / "android/app/src/main/AndroidManifest.xml"
 manifest = manifest_path.read_text(encoding="utf-8")
 if "android.permission.INTERNET" not in manifest:
