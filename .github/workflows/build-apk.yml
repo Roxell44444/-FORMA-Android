@@ -101,6 +101,18 @@ jobs:
           python3 scripts/forma-pose-compat.py
           python3 scripts/forma-clad.py
           python3 scripts/forma-pro.py
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path("FORMA-1.1.0/index.html").read_text(encoding="utf-8")
+          app = Path("FORMA-1.1.0/src/app.js").read_text(encoding="utf-8")
+          assert html.count('id="scan-cloud-consent"') == 1, "Gemini photo consent must appear exactly once"
+          assert 'id="forma-gemini-consent"' not in html, "Obsolete duplicate Gemini consent remains"
+          assert html.count('id="forma-clad-consent"') == 1, "Clad consent must appear exactly once"
+          assert "const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;" in app
+          assert "if (!$('#scan-cloud-consent')?.checked) return null;" in app
+          assert "output withheld because photo quality checks failed" not in app
+          print("Scanner consent and permissive photo-quality invariants verified.")
+          PY
           node --check backend/worker.js
           npm --prefix backend test
           python3 - <<'PY'
@@ -108,14 +120,14 @@ jobs:
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.7.0"
+          data["version"] = "1.7.1"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8")
-          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.7.0"', s)
-          assert 'versionName "1.7.0"' in s, "Android versionName was not updated"
-          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 9", s)
-          assert "versionCode 9" in s, "Android versionCode was not updated"
+          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.7.1"', s)
+          assert 'versionName "1.7.1"' in s, "Android versionName was not updated"
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 10", s)
+          assert "versionCode 10" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
@@ -184,7 +196,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build FORMA 1.5 APK
+      - name: Build FORMA 1.7.1 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -193,6 +205,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.7.0-debug-apk
+          name: FORMA-1.7.1-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
