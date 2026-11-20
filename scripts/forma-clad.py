@@ -11,9 +11,8 @@ def once(text, old, new, label):
 # Separate opt-in. Only the front photo and height are sent to Clad.
 index_path = ROOT / "index.html"
 html = index_path.read_text(encoding="utf-8")
-anchor = '              <label class="external-consent"><input type="checkbox" id="scan-fallback-consent" />'
-consent = '''              <p class="scan-privacy-note">La reconstrucción de perímetros utiliza la vista frontal. La estimación de composición corporal se realiza por separado y puede no estar disponible en todos los análisis.</p>
-'''
+anchor = '              <p class="scan-privacy-note">Al iniciar el análisis, tus fotografías podrán procesarse de forma segura para completar las mediciones y ofrecer orientación si el análisis principal no está disponible.</p>'
+consent = ''
 if "id=\"clad-scan-consent\"" not in html:
     html = once(html, anchor, consent + anchor, "Clad consent insertion")
 index_path.write_text(html, encoding="utf-8")
