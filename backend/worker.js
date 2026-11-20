@@ -38,7 +38,7 @@ function splitDataUrl(value) {
 
 async function generate(env, system, parts) {
   if (!env.GEMINI_API_KEY) return json({ error: "El asistente inteligente aún no está configurado." }, 503);
-  const model = env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = env.GEMINI_MODEL || "gemini-3.8-flash";
   const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
     encodeURIComponent(model) + ":generateContent";
   const response = await fetch(endpoint, {
