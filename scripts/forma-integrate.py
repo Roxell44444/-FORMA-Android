@@ -15,11 +15,11 @@ if n != 1: raise SystemExit("Guardian checkbox not found.")
 html, n = re.subn(r'<article class="panel form-panel hidden" id="pediatric-rfm-panel">.*?</article>', '', html, count=1, flags=re.S)
 if n != 1: raise SystemExit("Pediatric body measurement panel not found.")
 scan_button = '              <button class="button button-primary full-width analyze-button" id="analyze-body-scan" disabled>Analizar mi físico</button>'
-scan_consent = '''              <label class="external-consent"><input type="checkbox" id="scan-fallback-consent" /><span><strong>Permitir un análisis visual de respaldo</strong><small>Solo si el análisis principal falla, se enviarán estas dos fotos a Google Gemini para recibir observaciones cualitativas. No generará porcentajes ni medidas. En el nivel gratuito, Google puede usar el contenido enviado para mejorar sus productos.</small></span></label>
+scan_consent = '''              <p class="scan-privacy-note">Al iniciar el análisis, tus fotografías podrán procesarse de forma segura para completar las mediciones y ofrecer orientación si el análisis principal no está disponible.</p>
 '''
 html = once(html, scan_button, scan_consent + scan_button, "scanner consent")
 coach_form = '<form id="chat-form" class="chat-input-row">'
-coach_consent = '''<label class="external-consent coach-consent"><input type="checkbox" id="gemini-coach-consent" /><span><strong>Usar respuestas inteligentes personalizadas</strong><small>Con tu permiso, se enviará tu pregunta y un resumen de tu perfil y progreso a Gemini. No se enviarán fotos. El nivel gratuito de Google puede utilizar el contenido enviado para mejorar sus productos.</small></span></label>'''
+coach_consent = '''<p class="coach-privacy-note">Tus preguntas y los datos relevantes de tu perfil se utilizan para personalizar las respuestas. No se envían fotografías desde esta sección.</p>'''
 html = once(html, coach_form, coach_consent + coach_form, "coach consent")
 index_path.write_text(html, encoding="utf-8")
 
@@ -90,6 +90,9 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 }
 ''';
 
+css += '''
+.scan-privacy-note,.coach-privacy-note { margin:10px 0 14px; padding:10px 12px; border-left:3px solid var(--green); border-radius:8px; background:var(--panel-2); color:var(--muted); font-size:12px; line-height:1.5; }
+''';
 css_path.write_text(css, encoding="utf-8")
 
 app_path = ROOT / "src/app.js"
@@ -121,7 +124,7 @@ new_scan = '''async function imageToCompactDataUrl(image) {
 }
 
 async function runGeminiPhotoFallback() {
-  if (!$('#scan-fallback-consent')?.checked) return false;
+  // El respaldo visual se ejecuta automáticamente si el análisis principal no está disponible.
   try {
     const [frontImage, sideImage] = await Promise.all([
       imageToCompactDataUrl($('img', $('#slot-front'))),
@@ -133,7 +136,7 @@ async function runGeminiPhotoFallback() {
     renderScanResult();
     renderPlan();
     renderDiet();
-    $('#capture-status').textContent = 'Gemini ofrece una orientación visual aproximada. No se generaron medidas ni porcentajes corporales.';
+    $('#capture-status').textContent = 'Se ha generado una orientación visual aproximada. No se generaron medidas ni porcentajes corporales.';
     $('#pose-pair-summary').textContent = 'Para obtener medidas, mejora las fotos y vuelve a intentarlo.';
     toast('Orientación visual completada. No es una medición corporal.');
     return true;
@@ -332,7 +335,7 @@ function coachContextForGemini() {
 
 async function sendCoachMessage(message) {
   const bubble = addMessage('Estoy preparando una respuesta…', 'coach');
-  if ($('#gemini-coach-consent')?.checked && state.profile?.age >= 18) {
+  if (state.profile?.age >= 18) {
     try {
       bubble.textContent = await askFormaCoach({ message, context: coachContextForGemini() });
     } catch (error) {
