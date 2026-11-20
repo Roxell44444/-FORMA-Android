@@ -219,8 +219,7 @@ app = once(
     : safe ? profileAppendicularMuscle(p) : null;""",
     "BodyComp plan metrics",
 )
-app = once(app, "GRASA CORPORAL · ESTIMACIÓN HÍBRIDA", "GRASA CORPORAL · ESTIMACIÓN", "simplify body fat label")
-app = once(app, '<small>MÚSCULO ESQUELÉTICO APENDICULAR</small>', '<small>${muscleEstimate?.bodyComp ? "MASA MAGRA APENDICULAR" : "MÚSCULO ESQUELÉTICO APENDICULAR"}</small>', "muscle label")
+app = once(app, '<small>REFERENCIA MUSCULAR</small>', '<small>${muscleEstimate?.bodyComp ? "MASA MAGRA APENDICULAR" : "REFERENCIA MUSCULAR"}</small>', "muscle label")
 app = once(app, "Cifra orientativa basada en medidas corporales.", "${muscleEstimate?.bodyComp ? 'Estimación de masa magra apendicular; no representa todo el músculo.' : 'Cifra orientativa basada en medidas corporales.'}", "muscle description")
 app = once(app, "Perfil menor de 18 años · tutor confirmado", "Perfil menor de 18 años · bienestar y crecimiento", "minor plan label")
 
