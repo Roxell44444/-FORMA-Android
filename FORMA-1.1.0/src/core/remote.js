@@ -18,7 +18,7 @@ async function readBackendConfig() {
       }
       const parsed = new URL(raw);
       if (parsed.protocol !== "https:") throw new Error("La dirección del servidor no utiliza HTTPS.");
-      return parsed.origin.replace(/\\/+$/, "");
+      return parsed.origin;
     } catch (error) {
       lastError = error;
     }
