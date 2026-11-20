@@ -93,6 +93,31 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 css += '''
 .scan-privacy-note,.coach-privacy-note { margin:10px 0 14px; padding:10px 12px; border-left:3px solid var(--green); border-radius:8px; background:var(--panel-2); color:var(--muted); font-size:12px; line-height:1.5; }
 ''';
+
+css += """
+/* FORMA appearance palettes: grayscale is the default; every palette updates shared design tokens. */
+:root { --bg:#f5f5f5; --panel:#fff; --panel-2:#ededed; --line:#d5d5d5; --text:#171717; --muted:#626262; --green:#262626; --green-2:#000; --mint:#e8e8e8; --accent:#262626; --shadow:0 10px 28px rgba(0,0,0,.07); }
+body { background:var(--bg) !important; color:var(--text) !important; }
+.sidebar,.topbar,.mobile-nav,.panel,.metric-card,.capture-slot,.capture-panel,.scan-instructions,.summary-tile,.calorie-box,.coach-panel { background:var(--panel) !important; color:var(--text) !important; border-color:var(--line) !important; }
+.nav-item:hover,.nav-item.active,.button-secondary,.suggested-prompts button,.mobile-nav-item.active span { background:var(--mint) !important; color:var(--green) !important; }
+.button-primary,.send-button,.user-bubble { background:var(--green) !important; color:#fff !important; }
+.button-primary:hover,.send-button:hover { background:var(--green-2) !important; }
+.local-pill,.avatar,.notice-neutral,.capture-status,.privacy-note,.nutrition-reminder,.coach-bubble { background:var(--mint) !important; color:var(--green) !important; border-color:var(--line) !important; }
+.metric-symbol,.history-count,.history-values span,.trend-number,.mobile-nav-item.active { color:var(--green) !important; }
+.scan-result-card,.capture-preview,.summary-tile { background:var(--panel-2) !important; border-color:var(--line) !important; color:var(--text) !important; }
+.chat-input-row input,input,select,textarea { background:var(--panel) !important; color:var(--text) !important; border-color:var(--line) !important; }
+.appearance-launcher { position:fixed; right:16px; bottom:86px; z-index:9998; border:1px solid var(--line); border-radius:999px; padding:11px 15px; background:var(--green); color:#fff; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+.appearance-sheet { position:fixed; inset:0; z-index:9999; display:none; align-items:flex-end; justify-content:center; background:rgba(0,0,0,.45); padding:16px; }
+.appearance-sheet.open { display:flex; }
+.appearance-card { width:min(100%,520px); max-height:80vh; overflow:auto; padding:20px; border-radius:22px; background:var(--panel); color:var(--text); box-shadow:0 18px 60px rgba(0,0,0,.24); }
+.appearance-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:16px; }
+.appearance-choice { display:flex; align-items:center; gap:10px; min-height:54px; padding:10px; border:1px solid var(--line); border-radius:13px; background:var(--panel-2); color:var(--text); text-align:left; }
+.appearance-choice[aria-pressed=true] { outline:2px solid var(--green); outline-offset:1px; }
+.appearance-dots { display:flex; flex:0 0 38px; height:24px; overflow:hidden; border-radius:8px; border:1px solid var(--line); }
+.appearance-dots i { flex:1; }
+.appearance-close { display:block; width:100%; margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--panel-2); color:var(--text); }
+"""
+
 css_path.write_text(css, encoding="utf-8")
 
 app_path = ROOT / "src/app.js"
@@ -148,8 +173,17 @@ async function runGeminiPhotoFallback() {
 
 async function runBodyScan() {
   if (state.profile && state.profile.age < 18) return;
-  if (!poseResults.front || !poseResults.side || !capturedUrls.front || !capturedUrls.side) return;
-  if (poseResults.front.status === 'rejected' || poseResults.side.status === 'rejected') return;
+  if (!capturedUrls.front || !capturedUrls.side) return;
+  if (!poseResults.front || !poseResults.side) {
+    const usedVisualFallback = await runGeminiPhotoFallback();
+    if (!usedVisualFallback) $('#capture-status').textContent = 'No se pudo iniciar el análisis de postura ni conectar con el respaldo visual.';
+    return;
+  }
+  if (poseResults.front.status === 'rejected' || poseResults.side.status === 'rejected') {
+    const usedVisualFallback = await runGeminiPhotoFallback();
+    if (!usedVisualFallback) $('#capture-status').textContent = 'Falló la detección de postura y no se pudo conectar con el análisis visual. Revisa la conexión y las fotos.';
+    return;
+  }
   if (!state.profile?.height) {
     $('#capture-status').textContent = 'Completa tu estatura en Datos para terminar el análisis.';
     return;
@@ -210,9 +244,7 @@ async function runBodyScan() {
     saveState();
     const usedVisualFallback = await runGeminiPhotoFallback();
     if (!usedVisualFallback) {
-      $('#capture-status').textContent = $('#scan-fallback-consent')?.checked
-        ? 'No pudimos completar el análisis ni conectar con el respaldo visual. Revisa las fotos e inténtalo de nuevo.'
-        : 'No pudimos completar el análisis. Repite las fotos o autoriza el respaldo visual para recibir solo observaciones cualitativas.';
+      $('#capture-status').textContent = 'Falló el análisis principal y tampoco respondió el respaldo visual: ' + String(error?.message || 'error de análisis') + '. Comprueba las fotos y la conexión.';
       $('#pose-pair-summary').textContent = 'Prueba con buena iluminación, ropa ajustada, brazos separados y el cuerpo completo.';
       renderScanResult();
       renderPlan();
@@ -335,15 +367,14 @@ function coachContextForGemini() {
 
 async function sendCoachMessage(message) {
   const bubble = addMessage('Estoy preparando una respuesta…', 'coach');
-  if (state.profile?.age >= 18) {
-    try {
-      bubble.textContent = await askFormaCoach({ message, context: coachContextForGemini() });
-    } catch (error) {
-      console.warn('FORMA Coach online unavailable:', error);
-      bubble.textContent = coachReply(message) + ' (Respuesta local: el servicio inteligente no está conectado en este momento.)';
-    }
-  } else {
-    bubble.textContent = coachReply(message);
+  try {
+    bubble.textContent = await askFormaCoach({
+      message,
+      context: state.profile?.age >= 18 ? coachContextForGemini() : { profile: null, latestScan: null, progress: null }
+    });
+  } catch (error) {
+    console.error('FORMA Coach online request failed:', error);
+    bubble.textContent = 'No pude conectar con el Coach online en este momento. Comprueba tu conexión e inténtalo de nuevo. (' + String(error?.message || 'Error de conexión') + ')';
   }
   $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
 }
@@ -369,6 +400,54 @@ $$('[data-prompt]').forEach(button => button.addEventListener('click', () => {
 if "guardian-consent-row" in app or "profile.guardianConfirmed" in app:
     raise SystemExit("Guardian consent dependency remains in app.js.")
 app = once(app, "    $('#capture-status').textContent = 'No pudimos iniciar el análisis. Cierra y vuelve a abrir la app, e inténtalo de nuevo.';", "    $('#capture-status').textContent = 'No pudimos iniciar el detector de postura: ' + String(error?.message || 'error de inicialización') + '. Comprueba la conexión e inténtalo de nuevo.';", "pose initialization diagnostics")
+
+
+app += r"""
+/* User-selectable appearance palettes. Stored locally; default is monochrome. */
+(() => {
+  const palettes = {
+    mono: { label:'Blanco y negro', vars:['#f5f5f5','#ffffff','#ededed','#d5d5d5','#171717','#626262','#262626','#000000','#e8e8e8'] },
+    ocean: { label:'Azul océano', vars:['#eef6fb','#ffffff','#e2eff7','#c7dce9','#142b3b','#587184','#176b91','#0d4f70','#d9edf7'] },
+    violet: { label:'Violeta', vars:['#f5f1fb','#ffffff','#eee7f7','#ddd0ee','#2b1b3d','#746481','#7042a0','#512b7c','#eee3fa'] },
+    sunset: { label:'Atardecer', vars:['#fff4ed','#ffffff','#ffeadf','#f4d1bd','#3b2118','#80675c','#c45b32','#963e22','#ffe3d5'] },
+    forest: { label:'Bosque', vars:['#eff6f0','#ffffff','#e3eee4','#cbdccf','#183322','#5f7665','#286b43','#194b30','#dcefe0'] },
+    rose: { label:'Rosa', vars:['#fff1f5','#ffffff','#f9e3eb','#efcbd8','#3b1e2b','#806372','#b43c70','#85254e','#f8dce8'] },
+    amber: { label:'Dorado', vars:['#fbf6e9','#ffffff','#f3ecd8','#e6d9b8','#342a16','#796d51','#98701d','#705012','#f4e9c9'] },
+    midnight: { label:'Noche', vars:['#111318','#1b1e25','#252a33','#3a414d','#f3f4f6','#b7c0ce','#8ab4f8','#5d8bd6','#303b4c'] }
+  };
+  const keys=['--bg','--panel','--panel-2','--line','--text','--muted','--green','--green-2','--mint'];
+  const stored=localStorage.getItem('forma-appearance') || 'mono';
+  function apply(key) {
+    const palette=palettes[key] || palettes.mono;
+    keys.forEach((name,i)=>document.documentElement.style.setProperty(name,palette.vars[i]));
+    document.documentElement.dataset.formaPalette=key;
+    localStorage.setItem('forma-appearance',key);
+    document.querySelectorAll('.appearance-choice').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.palette===key)));
+  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>apply(stored),{once:true}); else apply(stored);
+  const launcher=document.createElement('button');
+  launcher.className='appearance-launcher'; launcher.type='button'; launcher.textContent='Apariencia';
+  launcher.setAttribute('aria-label','Personalizar colores de FORMA');
+  const sheet=document.createElement('div'); sheet.className='appearance-sheet'; sheet.setAttribute('role','dialog'); sheet.setAttribute('aria-modal','true'); sheet.setAttribute('aria-label','Personalizar apariencia');
+  const card=document.createElement('section'); card.className='appearance-card';
+  card.innerHTML='<h2 style="margin:0">Personalizar colores</h2><p style="margin:8px 0 0;color:var(--muted)">Elige una combinación para toda la aplicación.</p>';
+  const grid=document.createElement('div'); grid.className='appearance-grid';
+  Object.entries(palettes).forEach(([key,p])=>{
+    const b=document.createElement('button'); b.type='button'; b.className='appearance-choice'; b.dataset.palette=key;
+    b.innerHTML='<span class="appearance-dots"><i></i><i></i><i></i></span><strong></strong>';
+    const dots=b.querySelectorAll('i'); [p.vars[0],p.vars[6],p.vars[4]].forEach((c,i)=>dots[i].style.background=c);
+    b.querySelector('strong').textContent=p.label;
+    b.addEventListener('click',()=>apply(key)); grid.appendChild(b);
+  });
+  const close=document.createElement('button'); close.type='button'; close.className='appearance-close'; close.textContent='Cerrar';
+  close.addEventListener('click',()=>sheet.classList.remove('open'));
+  sheet.addEventListener('click',e=>{if(e.target===sheet)sheet.classList.remove('open');});
+  card.append(grid,close); sheet.append(card);
+  launcher.addEventListener('click',()=>sheet.classList.add('open'));
+  document.body.append(launcher,sheet);
+  apply(stored);
+})();
+"""
 
 app_path.write_text(app, encoding="utf-8")
 
