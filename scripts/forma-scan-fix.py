@@ -64,6 +64,7 @@ app = app.replace(
     ""
 )
 app = app.replace("$('#forma-clad-consent')?.checked === true;", "formaRemoteScanAllowed;")
+app = app.replace("const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;", "const cloudAnalysisAllowed = formaRemoteScanAllowed;")
 app = app.replace(
     """    const visualFallbackDone = $('#scan-cloud-consent')?.checked === true
       ? await runGeminiPhotoFallback()
