@@ -117,6 +117,17 @@ jobs:
           npm run check
           npm run build
 
+      - name: Validate BodyComp pipeline against reference silhouettes
+        run: |
+          set -euo pipefail
+          TEST_DIR=/tmp/forma-bodycomp-fixture
+          mkdir -p "$TEST_DIR"
+          BASE=https://raw.githubusercontent.com/rishabcv-eng/bodycomp/9b4f73469f9b099809ddb19a6e23cb346072e4f4/app/public/test
+          for file in expected.json front.png side.png; do
+            curl --fail --location --retry 3 "$BASE/$file" --output "$TEST_DIR/$file"
+          done
+          BODYCOMP_FIXTURE_DIR="$TEST_DIR" node scripts/bodycomp-parity.mjs
+
       - name: Configure Android entry point
         run: |
           sed -i 's/import android.app.Activity;/import androidx.activity.ComponentActivity;/' FORMA-1.1.0/android/app/src/main/java/com/forma/fitness/MainActivity.java
