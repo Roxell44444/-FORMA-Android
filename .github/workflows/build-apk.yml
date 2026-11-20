@@ -97,7 +97,7 @@ jobs:
           s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.5.2"', s)
           assert 'versionName "1.5.2"' in s, "Android versionName was not updated"
           s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 7", s)
-          assert "versionCode 6" in s, "Android versionCode was not updated"
+          assert "versionCode 7" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
