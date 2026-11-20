@@ -34,6 +34,62 @@ css += '''
 .external-consent small { opacity:.76; font-size:11px; line-height:1.45; }
 .coach-consent { margin:14px 0; }
 '''
+css += '''
+
+/* FORMA 1.6 visual refresh: accessible light palette and clearer surfaces */
+:root {
+  color-scheme: light;
+  --bg:#f4f7fa; --panel:#ffffff; --panel-2:#edf3f6; --line:#dce5eb;
+  --text:#172536; --muted:#5d6d7d; --green:#176b57; --green-2:#105846;
+  --mint:#d9f2e8; --amber:#80530c; --red:#b42318;
+  --shadow:0 10px 28px rgba(20,42,58,.07);
+}
+body { background:linear-gradient(180deg,#f8fafc 0%,#f1f5f8 100%); color:var(--text); }
+.sidebar { background:#fff; border-right-color:var(--line); }
+.brand,.topbar,.mobile-nav { background:rgba(255,255,255,.96); color:var(--text); }
+.brand strong,.mobile-brand { color:var(--text); }
+.brand small,.sidebar-label,.eyebrow,.topbar-context,.nav-item,.mobile-nav-item { color:#536477; }
+.nav-item:hover,.nav-item.active { background:#e9f4ef; color:var(--green); }
+.nav-item.active { box-shadow:inset 3px 0 var(--green); }
+.topbar { border-bottom-color:var(--line); }
+.local-pill { color:var(--green); background:#e8f4ef; border-color:#c8e2d7; }
+.avatar { background:#dceee6; color:var(--green); }
+.metric-card,.panel { background:#fff; border:1px solid var(--line); box-shadow:var(--shadow); }
+.metric-top,.metric-foot,.metric-value small,.muted { color:var(--muted); }
+.metric-symbol,.history-count,.history-values span,.trend-number { color:var(--green); }
+.button-primary,.send-button { background:var(--green); color:#fff; box-shadow:0 5px 14px rgba(23,107,87,.16); }
+.button-primary:hover,.send-button:hover { background:var(--green-2); }
+.button-secondary { background:#eaf4ef; border-color:#c9e1d6; color:var(--green); }
+.button-ghost { background:#fff; border-color:var(--line); color:#405366; }
+.notice-neutral,.capture-status,.privacy-note,.nutrition-reminder { background:#f0f6f3; border-color:#d6e7df; color:#344b43; }
+.notice-warning { background:#fff7e8; border-color:#f0dfb9; }
+.capture-slot,.capture-panel,.scan-instructions,.summary-tile,.calorie-box,.coach-panel { background:#fff; border-color:var(--line); color:var(--text); }
+.capture-preview { background:#eef3f6; border-color:#d8e2e9; }
+.capture-preview img { background:#eef3f6; }
+.capture-status { color:#41586b; }
+.scan-result-card,.summary-tile { background:#f7fafb; border-color:var(--line); }
+.scan-result-card strong,.summary-tile strong,.metric-value { color:var(--text); }
+.scan-result-card small,.summary-tile small { color:#607184; }
+.workout-day,.macro-row,.history-row,.coach-header,.chat-input-row { border-color:var(--line); }
+.workout-day li,.coach-rule { color:#43566a; }
+.coach-bubble { background:#edf4f1; color:#1d3b31; }
+.user-bubble { background:var(--green); color:#fff; }
+.suggested-prompts button { background:#f1f7f4; border-color:#d2e5dc; color:var(--green); }
+.chat-input-row input,input,select,textarea { color:var(--text); background:#fff; border-color:#cfdbe4; }
+.mobile-nav { border-top-color:var(--line); box-shadow:0 -5px 22px rgba(20,42,58,.06); }
+.mobile-nav-item.active { color:var(--green); }
+.mobile-nav-item.active span { background:#e4f2eb; }
+.external-consent { background:#f6faf8; border-color:#d9e6e0; color:var(--text); }
+:where(button,input,select,textarea,[tabindex]):focus-visible { outline:3px solid #2b8a70; outline-offset:2px; }
+button:disabled { opacity:.55; cursor:not-allowed; }
+@media(max-width:760px) {
+  .content-wrap { padding-top:22px; }
+  .panel,.metric-card { border-radius:18px; }
+  .mobile-nav { padding-top:9px; }
+  .mobile-nav-item small { font-size:9px; }
+}
+''';
+
 css_path.write_text(css, encoding="utf-8")
 
 app_path = ROOT / "src/app.js"
@@ -309,6 +365,8 @@ $$('[data-prompt]').forEach(button => button.addEventListener('click', () => {
 
 if "guardian-consent-row" in app or "profile.guardianConfirmed" in app:
     raise SystemExit("Guardian consent dependency remains in app.js.")
+app = once(app, "    $('#capture-status').textContent = 'No pudimos iniciar el análisis. Cierra y vuelve a abrir la app, e inténtalo de nuevo.';", "    $('#capture-status').textContent = 'No pudimos iniciar el detector de postura: ' + String(error?.message || 'error de inicialización') + '. Comprueba la conexión e inténtalo de nuevo.';", "pose initialization diagnostics")
+
 app_path.write_text(app, encoding="utf-8")
 
 pkg_path = ROOT / "package.json"
