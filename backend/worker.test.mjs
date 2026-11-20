@@ -38,8 +38,8 @@ test("rate limiting can reject Coach requests before calling Gemini", async () =
     COACH_RATE_LIMITER: {
       async limit(input) {
         calls++;
-        assert.match(input.key, /203\\.0\\.113\\.10/);
-        assert.match(input.key, /api\\/coach/);
+        assert.ok(input.key.includes("203.0.113.10"));
+        assert.ok(input.key.includes("/api/coach"));
         return { success: false };
       }
     }
@@ -60,7 +60,7 @@ test("Clad polling has a separate limit so normal polling does not consume scan-
     SCAN_RATE_LIMITER: { async limit() { scanCalls++; return { success: false }; } },
     CLAD_POLL_RATE_LIMITER: { async limit(input) {
       pollCalls++;
-      assert.match(input.key, /api\\/clad\\/poll/);
+      assert.ok(input.key.includes("/api/clad/poll"));
       return { success: true };
     } }
   };
