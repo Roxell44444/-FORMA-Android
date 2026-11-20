@@ -70,7 +70,6 @@ jobs:
         run: |
           set -euo pipefail
           cp assets/backend-config.json FORMA-1.1.0/public/config.json
-          cp assets/backend-config.json FORMA-1.1.0/public/config.json
           COMMIT=9b4f73469f9b099809ddb19a6e23cb346072e4f4
           mkdir -p FORMA-1.1.0/vendor/bodycomp FORMA-1.1.0/models/bodycomp
           for file in mask.js pipeline.js silhouette.js trees.js; do
@@ -81,8 +80,6 @@ jobs:
           curl --fail --location --retry 3 --connect-timeout 20             "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"             --output FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           test -s FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
           python3 scripts/forma-integrate.py
-          python3 scripts/forma-clad.py
-          node --check backend/worker.js
           python3 scripts/forma-clad.py
           node --check backend/worker.js
           python3 - <<'PY'
