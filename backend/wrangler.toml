@@ -1,0 +1,6 @@
+name = "forma-ai-worker"
+main = "worker.js"
+compatibility_date = "2026-11-20"
+
+[vars]
+GEMINI_MODEL = "gemini-2.5-flash"
