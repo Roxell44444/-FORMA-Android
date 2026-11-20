@@ -278,10 +278,7 @@ function formaSuitePrivacyHtml() {
     '<p class="fs-muted">La conexión en la nube queda desactivada en esta versión: primero se necesita una identidad de usuario y un sistema de autenticación seguro. CORS y límites por IP no sustituyen una cuenta.</p></section>';
 }
 
-function formaSuiteClose() {
-    '<div class="fs-privacy-row"><strong>Borrar historial numérico del escáner</strong><span>Elimina las tendencias guardadas del escáner. No borra tu perfil ni el resto de la aplicación.</span><button class="fs-danger" type="button" data-action="delete-scans">Borrar historial del escáner</button></div>' +
-    '<p class="fs-muted">La conexión en la nube queda desactivada en esta versión: primero se necesita una identidad de usuario y un sistema de autenticación seguro. CORS y límites por IP no sustituyen una cuenta.</p></section>';
-}
+
 
 function formaSuiteRender(tab) {
   const content = document.getElementById("fs-content");
@@ -318,6 +315,7 @@ function formaSuiteClose() {
   overlay.classList.remove("is-open");
   overlay.setAttribute("aria-hidden", "true");
   document.body.classList.remove("forma-suite-open");
+  formaSuiteClearPhotos();
 }
 
 function formaSuiteCollectForm(form, fields) {
@@ -488,12 +486,13 @@ function formaSuiteExport() {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function formaSuiteDeleteScans() {
   if (!confirm("¿Borrar el historial numérico del escáner guardado en este dispositivo? Esta acción no se puede deshacer.")) return;
   localStorage.removeItem("forma.scan-history.v1");
+  document.getElementById("forma-scan-history")?.remove();
   formaSuiteRender("privacidad");
   if (typeof renderFormaScanHistory === "function") renderFormaScanHistory();
 }
@@ -502,7 +501,9 @@ function formaSuiteWeeklyReview() {
   const consent = document.getElementById("fs-review-consent")?.checked === true;
   const data = formaSuiteRead();
   const summary = formaSuiteRecent(data.workouts).length + " entrenamientos, " +
-    formaSuiteRecent(data.meals).length + " comidas y " + formaSuiteRecent(data.habits).length + " registros de hábitos en los últimos siete días.";
+    formaSuiteRecent(formaSuiteAllMeals()).length + " comidas y " +
+    formaSuiteRecent(Array.isArray(state?.exerciseEntries) ? state.exerciseEntries : []).length +
+    " ejercicios, " + formaSuiteRecent(data.habits).length + " registros de hábitos en los últimos siete días.";
   const message = consent
     ? "Revisa este resumen semanal y dame recomendaciones realistas para la próxima semana. Distingue datos reales de registros incompletos; no propongas cambios extremos."
     : "Explícame cómo hacer una revisión semanal equilibrada de entrenamiento, alimentación, descanso y hábitos sin usar datos personales.";
