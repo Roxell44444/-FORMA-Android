@@ -120,7 +120,7 @@ jobs:
           assert 'fs-remote-scan-consent' in app, "Remote fallback setting is missing from Privacy"
           assert 'formaVisualFallbackError' in app, "Remote fallback errors must be surfaced to the user"
           assert 'No se ha enviado ninguna foto.' in app, "Disabled fallback must clearly state no upload occurred"
-          assert 'El respaldo por internet está desactivado' in app, "Disabled fallback must be explained clearly"
+          assert 'el respaldo por internet está desactivado' in app, "Disabled fallback must be explained clearly"
           assert 'formaWithTimeout(bodyCompPromise' in app, "Local scanner timeout/failover missing"
           assert 'const canRunClad = false;' in app, "Potentially paid 3D provider must remain disabled"
           assert 'state.scanResult || null' in app, "Main Coach must receive the current scan"
