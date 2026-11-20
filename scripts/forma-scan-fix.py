@@ -64,11 +64,11 @@ app = app.replace(
     ""
 )
 app = app.replace("$('#forma-clad-consent')?.checked === true;", "formaRemoteScanAllowed;")
-app = re.sub(
-    r'const canRunClad = Boolean\\(imageForClad\\) &&\\s*Number\\(profile\\.height\\) >= 140 &&\\s*Number\\(profile\\.height\\) <= 220 &&\\s*formaRemoteScanAllowed;',
-    'const canRunClad = false;',
-    app,
-    count=1,
+app = app.replace(
+    """  const canRunClad = Boolean(imageForClad) &&
+    Number(profile.height) >= 140 && Number(profile.height) <= 220 &&
+    formaRemoteScanAllowed;""",
+    "  const canRunClad = false;"
 )
 
 app = app.replace("const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;", "const cloudAnalysisAllowed = formaRemoteScanAllowed;")
