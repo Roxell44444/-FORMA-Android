@@ -6,6 +6,10 @@ on:
       - 'FORMA-ANDROID-APK-BUILDER-1.1.0.zip'
       - 'assets/forma-app-icon.webp'
       - 'scripts/forma-redesign.py.gz'
+      - 'scripts/forma-integrate.py'
+      - 'FORMA-1.1.0/src/scanner/bodycomp.js'
+      - 'FORMA-1.1.0/src/core/remote.js'
+      - 'FORMA-1.1.0/public/config.json'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -24,30 +28,6 @@ jobs:
           mkdir -p FORMA-1.1.0/android/app/src/main/res/drawable-nodpi
           cp assets/forma-app-icon.webp FORMA-1.1.0/android/app/src/main/res/drawable-nodpi/forma_launcher.webp
           sed -i 's/vision_bundle.mjs/vision_bundle.js/g' FORMA-1.1.0/src/scanner/pose.js FORMA-1.1.0/service-worker.js
-
-      - name: Inspect packaged FORMA source
-        run: |
-          echo '=== FILE INVENTORY ==='
-          find FORMA-1.1.0 -maxdepth 4 -type f | sort | head -240
-          echo '=== PACKAGE ==='
-          cat FORMA-1.1.0/package.json
-          echo '=== APP SOURCE SIZE ==='
-          wc -l FORMA-1.1.0/src/app.js FORMA-1.1.0/index.html
-          echo '=== SOURCE ENTRYPOINTS ==='
-          for f in FORMA-1.1.0/src/app.js FORMA-1.1.0/index.html FORMA-1.1.0/src/scanner/pose.js; do
-            echo "--- $f ---"
-            sed -n '1,260p' "$f"
-          done
-          echo '=== APP SCAN FLOW ==='
-          sed -n '190,430p' FORMA-1.1.0/src/app.js
-          echo '=== APP PLAN + COACH FLOW ==='
-          sed -n '480,710p' FORMA-1.1.0/src/app.js
-          echo '=== METRICS PHOTO COMPOSITION ==='
-          sed -n '110,185p' FORMA-1.1.0/src/core/metrics.js
-          echo '=== TEST FILES ==='
-          find FORMA-1.1.0 -type f -path '*test*' | sort
-          echo '=== SCAN / COACH / PLAN REFERENCES ==='
-          grep -RniE 'coach|gemini|scan|analyse|analy[sz]|bodycomp|plan|photo|camera' FORMA-1.1.0/src --include='*.js' | head -300
 
       - name: Simplify remaining user-facing copy
         run: |
@@ -78,6 +58,33 @@ jobs:
           app.write_text(js, encoding='utf-8')
           PY
 
+      - name: Integrate BodyComp and consent-gated AI services
+        run: |
+          set -euo pipefail
+          COMMIT=9b4f73469f9b099809ddb19a6e23cb346072e4f4
+          mkdir -p FORMA-1.1.0/vendor/bodycomp FORMA-1.1.0/models/bodycomp
+          for file in mask.js pipeline.js silhouette.js trees.js; do
+            curl --fail --location --retry 3 "https://raw.githubusercontent.com/rishabcv-eng/bodycomp/$COMMIT/app/public/js/$file" --output "FORMA-1.1.0/vendor/bodycomp/$file"
+            test -s "FORMA-1.1.0/vendor/bodycomp/$file"
+          done
+          curl --fail --location --retry 3 "https://raw.githubusercontent.com/rishabcv-eng/bodycomp/$COMMIT/LICENSE" --output FORMA-1.1.0/vendor/bodycomp/LICENSE
+          curl --fail --location --retry 3 --connect-timeout 20             "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite"             --output FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
+          test -s FORMA-1.1.0/models/bodycomp/selfie_multiclass.tflite
+          python3 scripts/forma-integrate.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("FORMA-1.1.0/package.json")
+          data = json.loads(p.read_text(encoding="utf-8"))
+          data["version"] = "1.4.0"
+          p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\\n", encoding="utf-8")
+          g = Path("FORMA-1.1.0/android/app/build.gradle")
+          s = g.read_text(encoding="utf-8").replace('versionName "1.2.0"', 'versionName "1.4.0"')
+          s = s.replace("versionCode 2", "versionCode 4")
+          g.write_text(s, encoding="utf-8")
+          PY
+          echo "BodyComp source and MediaPipe segmentation model prepared."
+      
       - name: Package on-device body analysis
         working-directory: FORMA-1.1.0
         run: |
@@ -126,7 +133,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build FORMA 1.2 APK
+      - name: Build FORMA 1.4 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -135,6 +142,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.2.0-debug-apk
+          name: FORMA-1.4.0-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
