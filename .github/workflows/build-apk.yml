@@ -117,6 +117,11 @@ jobs:
           mkdir -p android/app/src/main/assets/public
           cp -a src public vendor models android/app/src/main/assets/public/
           cp index.html manifest.webmanifest service-worker.js android/app/src/main/assets/public/
+          # The public/ directory is copied as a nested folder; also place config.json
+          # beside index.html because remote.js fetches it relative to the app entry point.
+          cp public/config.json android/app/src/main/assets/public/config.json
+          test -s android/app/src/main/assets/public/config.json
+          grep -q 'formaandroid.roxell-santiesteban.workers.dev' android/app/src/main/assets/public/config.json
           npm run check
           npm run build
 
