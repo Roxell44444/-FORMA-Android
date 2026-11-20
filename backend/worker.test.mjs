@@ -20,6 +20,7 @@ test("health reports which server secrets are present without revealing them", a
   assert.equal(data.ok, true);
   assert.equal(data.geminiConfigured, false);
   assert.equal(data.cladConfigured, false);
+  assert.equal(data.rateLimitsConfigured, false);
 });
 
 test("rejects browser origins that are not explicitly allowed", async () => {
@@ -144,4 +145,44 @@ test("Clad poll URLs cannot redirect the provider key to another host", async ()
     { ...ENV, CLAD_API_KEY: "test-clad-key" }
   );
   assert.equal(response.status, 400);
+});
+
+
+test("rate limits expensive Coach requests before contacting Gemini", async () => {
+  let observedKey = null;
+  const response = await worker.fetch(
+    request("/api/coach", { message: "Dame un plan", context: {} }, "POST", { "cf-connecting-ip": "203.0.113.10" }),
+    {
+      ...ENV,
+      COACH_RATE_LIMITER: {
+        limit: async ({ key }) => { observedKey = key; return { success: false }; }
+      }
+    }
+  );
+  assert.equal(response.status, 429);
+  assert.equal(observedKey, "203.0.113.10:/api/coach");
+});
+
+test("rate limits photo analysis independently from Coach traffic", async () => {
+  let observedKey = null;
+  const response = await worker.fetch(
+    request("/api/scan-fallback", { images: [] }, "POST", { "cf-connecting-ip": "203.0.113.11" }),
+    {
+      ...ENV,
+      SCAN_RATE_LIMITER: {
+        limit: async ({ key }) => { observedKey = key; return { success: false }; }
+      }
+    }
+  );
+  assert.equal(response.status, 429);
+  assert.equal(observedKey, "203.0.113.11:/api/scan-fallback");
+});
+
+test("rejects streamed JSON bodies that exceed the maximum even without Content-Length", async () => {
+  const response = await worker.fetch(new Request("https://forma.example/api/scan-fallback", {
+    method: "POST",
+    headers: { Origin: ORIGIN, "Content-Type": "application/json" },
+    body: " ".repeat(12_000_100)
+  }), ENV);
+  assert.equal(response.status, 413);
 });
