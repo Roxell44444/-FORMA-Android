@@ -13,8 +13,8 @@ index_path = ROOT / "index.html"
 html = index_path.read_text(encoding="utf-8")
 anchor = '              <p class="scan-privacy-note">Al iniciar el análisis, tus fotografías podrán procesarse de forma segura para completar las mediciones y ofrecer orientación si el análisis principal no está disponible.</p>'
 consent = ''
-if "id=\"clad-scan-consent\"" not in html:
-    html = once(html, anchor, consent + anchor, "Clad consent insertion")
+if "scan-privacy-note" not in html:
+    raise SystemExit("Scanner privacy notice is missing.")
 index_path.write_text(html, encoding="utf-8")
 
 app_path = ROOT / "src/app.js"
