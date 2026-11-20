@@ -11,7 +11,7 @@ def once(text, old, new, label):
 # Separate opt-in. Only the front photo and height are sent to Clad.
 index_path = ROOT / "index.html"
 html = index_path.read_text(encoding="utf-8")
-anchor = '              <p class="scan-privacy-note">Al iniciar el análisis, tus fotografías podrán procesarse de forma segura para completar las mediciones y ofrecer orientación si el análisis principal no está disponible.</p>'
+anchor = '              <p class="scan-privacy-note">Puedes analizar una o dos fotos, desde cualquier ángulo. FORMA estudiará lo que se vea; las medidas numéricas aparecerán solo cuando exista información suficiente.</p>'
 consent = ''
 if "scan-privacy-note" not in html:
     raise SystemExit("Scanner privacy notice is missing.")
@@ -44,26 +44,21 @@ new_scan = '''function cladMeasurementsFromResult(data) {
       result[key] = { circumferenceCm: value, source: "Clad" };
     }
   }
-  if (!result.waist || !result.hip || !result.chest) {
-    throw new Error("Clad no devolvió las medidas principales necesarias.");
-  }
+  if (!Object.keys(result).length) throw new Error("Clad no devolvió medidas utilizables.");
   return result;
 }
 
-async function runCladPhotoScan() {
-  // La reconstrucción se inicia automáticamente como parte del análisis.
+async function runCladPhotoScan(imageElement) {
   const heightCm = Number(state.profile?.height);
   if (!Number.isFinite(heightCm) || heightCm < 140 || heightCm > 220) {
-    throw new Error("La reconstrucción admite estaturas entre 140 y 220 cm.");
+    throw new Error("No hay una estatura compatible para la reconstrucción.");
   }
-  const frontImage = await imageToCompactDataUrl($('img', $('#slot-front')));
+  const frontImage = await imageToCompactDataUrl(imageElement);
   const job = await startCladPhotoJob({ frontImage, heightCm });
   if (!job.jobId || !job.pollUrl) throw new Error("No se pudo iniciar la reconstrucción 3D.");
   const startedAt = Date.now();
-  let lastStatus = "queued";
-  while (Date.now() - startedAt < 300000) {
+  while (Date.now() - startedAt < 180000) {
     const result = await pollCladPhotoJob({ jobId: job.jobId, pollUrl: job.pollUrl });
-    lastStatus = result.status || lastStatus;
     if (result.status === "completed") {
       return {
         measurements: cladMeasurementsFromResult(result),
@@ -71,10 +66,10 @@ async function runCladPhotoScan() {
       };
     }
     if (result.status === "failed") throw new Error(result.error || "No se pudo completar la reconstrucción 3D.");
-    $('#capture-status').textContent = "BodyComp está analizando tus fotos. Se está reconstruyendo el modelo 3D…";
+    $('#capture-status').textContent = "Analizando la fotografía y calculando las medidas disponibles…";
     await new Promise(resolve => setTimeout(resolve, 2200));
   }
-  throw new Error("La reconstrucción 3D de Clad superó el tiempo de espera.");
+  throw new Error("La reconstrucción 3D superó el tiempo de espera.");
 }
 
 function compareScanEngines(bodyCompMeasurements, cladMeasurements) {
@@ -83,59 +78,91 @@ function compareScanEngines(bodyCompMeasurements, cladMeasurements) {
   for (const key of ["waist", "hip", "chest", "thigh", "bicep"]) {
     const a = Number(bodyCompMeasurements[key]?.circumferenceCm);
     const b = Number(cladMeasurements[key]?.circumferenceCm);
-    if (Number.isFinite(a) && Number.isFinite(b)) {
-      output[key] = Number(Math.abs(a - b).toFixed(1));
-    }
+    if (Number.isFinite(a) && Number.isFinite(b)) output[key] = Number(Math.abs(a - b).toFixed(1));
   }
   return output;
 }
 
-async function runBodyScan() {
-  if (state.profile && state.profile.age < 18) return;
-  if (!poseResults.front || !poseResults.side || !capturedUrls.front || !capturedUrls.side) return;
-  if (poseResults.front.status === 'rejected' || poseResults.side.status === 'rejected') return;
-  if (!state.profile?.height) {
-    $('#capture-status').textContent = 'Completa tu estatura en Datos para terminar el análisis.';
-    return;
+async function runGeminiPhotoFallback() {
+  try {
+    const candidates = [
+      { label: "Primera fotografía", image: $('img', $('#slot-front')) },
+      { label: "Segunda fotografía", image: $('img', $('#slot-side')) }
+    ].filter(item => item.image && item.image.complete && item.image.naturalWidth > 0);
+    if (!candidates.length) throw new Error("No hay ninguna fotografía cargada.");
+    const images = await Promise.all(candidates.map(async item => ({
+      label: item.label,
+      image: await imageToCompactDataUrl(item.image)
+    })));
+    const text = await askFormaVisualFallback({ images });
+    state.scanResult = {
+      visualFallback: { text, imageCount: images.length },
+      createdAt: new Date().toISOString()
+    };
+    saveState();
+    renderScanResult();
+    renderPlan();
+    renderDiet();
+    $('#capture-status').textContent = "FORMA ha analizado lo que aparece en tus fotografías. Las cifras solo se muestran cuando hay base suficiente.";
+    $('#pose-pair-summary').textContent = "Análisis visual realizado con " + images.length + (images.length === 1 ? " fotografía." : " fotografías.");
+    toast("Análisis visual completado.");
+    return true;
+  } catch (error) {
+    console.warn("FORMA visual analysis unavailable:", error);
+    return false;
   }
-  if (poseResults.front.orientation !== 'front-likely' || poseResults.side.orientation !== 'side-likely') {
-    $('#pose-pair-summary').textContent = 'Las fotos no muestran claramente una vista frontal y otra de perfil. Repite las que sean necesarias.';
-    $('#capture-status').textContent = 'No pudimos confirmar el ángulo de las fotos.';
+}
+
+async function runBodyScan() {
+  if (state.profile && state.profile.age < 18) {
+    $('#capture-status').textContent = "Para menores, FORMA ofrece orientación general de bienestar, no estimaciones de composición corporal.";
     return;
   }
 
-  const bodyCompPromise = analyseBodyCompPhotos(
-    $('img', $('#slot-front')), $('img', $('#slot-side')), state.profile,
-    poseResults.front.landmarks, poseResults.side.landmarks
-  );
-  const cladEnabled = true;
-  const cladPromise = cladEnabled ? runCladPhotoScan() : Promise.resolve(null);
-  $('#capture-status').textContent = cladEnabled
-    ? 'Estamos analizando tus fotos y preparando la reconstrucción 3D…'
-    : 'Estamos analizando tus fotos…';
+  const frontImage = $('img', $('#slot-front'));
+  const sideImage = $('img', $('#slot-side'));
+  const hasFront = Boolean(frontImage && frontImage.complete && frontImage.naturalWidth > 0);
+  const hasSide = Boolean(sideImage && sideImage.complete && sideImage.naturalWidth > 0);
+  if (!hasFront && !hasSide) {
+    $('#capture-status').textContent = "Añade al menos una fotografía para analizar lo que aparece en ella.";
+    return;
+  }
+
+  $('#capture-status').textContent = "FORMA está analizando tus fotografías…";
+  const profile = state.profile || {};
+  const hasNumericProfile =
+    Number.isFinite(Number(profile.age)) && Number(profile.age) >= 18 && Number(profile.age) <= 59 &&
+    ["male", "female"].includes(profile.equation) &&
+    Number.isFinite(Number(profile.height)) && Number(profile.height) >= 130 && Number(profile.height) <= 230 &&
+    Number.isFinite(Number(profile.weight)) && Number(profile.weight) > 0;
+
+  const canRunBodyComp =
+    hasFront && hasSide && hasNumericProfile &&
+    poseResults.front?.status === "fulfilled" && poseResults.side?.status === "fulfilled" &&
+    poseResults.front.landmarks?.length && poseResults.side.landmarks?.length;
+
+  const bodyCompPromise = canRunBodyComp
+    ? analyseBodyCompPhotos(frontImage, sideImage, profile, poseResults.front.landmarks, poseResults.side.landmarks)
+    : Promise.resolve(null);
+
+  // Clad recibe una sola imagen frontal si existe. Si solo hay otra vista,
+  // Gemini sigue analizando esa fotografía sin bloquear al usuario.
+  const canRunClad = hasFront && Number(profile.height) >= 140 && Number(profile.height) <= 220;
+  const cladPromise = canRunClad ? runCladPhotoScan(frontImage) : Promise.resolve(null);
 
   const [bodyCompResult, cladResult] = await Promise.allSettled([bodyCompPromise, cladPromise]);
-  const bodyCompOk = bodyCompResult.status === 'fulfilled';
-  const cladOk = cladResult.status === 'fulfilled' && Boolean(cladResult.value);
-  const bodyComp = bodyCompOk ? bodyCompResult.value : null;
-  const clad = cladOk ? cladResult.value : null;
-
-  if (!bodyCompOk) console.warn('FORMA BodyComp unavailable:', bodyCompResult.reason);
-  if (cladEnabled && !cladOk) console.warn('FORMA Clad unavailable:', cladResult.reason);
+  let bodyComp = bodyCompResult.status === "fulfilled" ? bodyCompResult.value : null;
+  const clad = cladResult.status === "fulfilled" ? cladResult.value : null;
+  if (!bodyComp && bodyCompResult.status === "rejected") console.warn("FORMA BodyComp unavailable:", bodyCompResult.reason);
+  if (!clad && cladResult.status === "rejected") console.warn("FORMA Clad unavailable:", cladResult.reason);
 
   if (!bodyComp && !clad) {
     state.scanResult = null;
     saveState();
     const usedVisualFallback = await runGeminiPhotoFallback();
     if (!usedVisualFallback) {
-      const cladProblem = cladEnabled ? ' Clad tampoco pudo completar la reconstrucción.' : '';
-      $('#capture-status').textContent = ($('#scan-fallback-consent')?.checked)
-        ? 'No pudimos completar los análisis ni conectar con el respaldo visual. Revisa las fotos e inténtalo de nuevo.'
-        : 'No pudimos completar el análisis.' + cladProblem + ' Repite las fotos o autoriza el respaldo visual cualitativo.';
-      $('#pose-pair-summary').textContent = 'Prueba con buena iluminación, ropa ajustada, brazos separados y el cuerpo completo.';
+      $('#capture-status').textContent = "No se pudo conectar con el análisis visual. Comprueba Internet e inténtalo de nuevo.";
       renderScanResult();
-      renderPlan();
-      renderDiet();
     }
     return;
   }
@@ -146,7 +173,7 @@ async function runBodyScan() {
   let captureQuality = null;
   if (bodyComp) {
     const output = bodyComp.output;
-    const weight = Number(state.profile.weight);
+    const weight = Number(profile.weight);
     const bf = output.composition.bodyfat_pct;
     const alm = output.composition.alm_kg;
     const bodyFatLow = Math.max(0, Math.min(100, bf.low));
@@ -154,7 +181,7 @@ async function runBodyScan() {
     const fatMassLowKg = Number((weight * bodyFatLow / 100).toFixed(1));
     const fatMassHighKg = Number((weight * bodyFatHigh / 100).toFixed(1));
     composition = {
-      source: 'BodyComp',
+      source: "BodyComp",
       bodyFatPercent: Number(bf.estimate.toFixed(1)),
       bodyFatLow: Number(bodyFatLow.toFixed(1)),
       bodyFatHigh: Number(bodyFatHigh.toFixed(1)),
@@ -168,44 +195,45 @@ async function runBodyScan() {
       intervalCoverage: bf.coverage80
     };
     measurements = {};
-    for (const key of ['waist', 'hip', 'chest', 'thigh', 'bicep']) {
+    for (const key of ["waist", "hip", "chest", "thigh", "bicep"]) {
       const value = Number(output.measurements[key]);
-      if (!Number.isFinite(value) || value <= 0 || value > 250) {
-        measurements = null;
-        break;
+      if (Number.isFinite(value) && value > 0 && value < 250) {
+        measurements[key] = { circumferenceCm: value, source: "BodyComp" };
       }
-      measurements[key] = { circumferenceCm: value, source: 'BodyComp' };
     }
-    if (!measurements) {
-      state.scanResult = null;
-      saveState();
-      const usedVisualFallback = await runGeminiPhotoFallback();
-      if (!usedVisualFallback) {
-        $('#capture-status').textContent = 'El resultado de BodyComp no superó las comprobaciones de coherencia. Repite las fotos.';
-        renderScanResult();
-      }
-      return;
+    if (!Number.isFinite(alm?.estimate) || alm.estimate <= 0) {
+      appendicularLeanMassKg = null;
+    } else {
+      appendicularLeanMassKg = Number(alm.estimate.toFixed(1));
     }
-    appendicularLeanMassKg = Number.isFinite(alm?.estimate) && alm.estimate > 0 ? alm.estimate : null;
-    captureQuality = bodyComp.quality;
-  } else if (clad) {
-    measurements = clad.measurements;
+    if (!Object.keys(measurements).length) {
+      bodyComp = null;
+      composition = null;
+    }
+    captureQuality = bodyComp ? bodyCompResult.value.quality : null;
+  }
+
+  if (!bodyComp && !clad) {
+    state.scanResult = null;
+    saveState();
+    await runGeminiPhotoFallback();
+    return;
   }
 
   const cladMeasurements = clad ? clad.measurements : null;
-  const crossCheck = compareScanEngines(bodyComp ? measurements : null, cladMeasurements);
+  if (!measurements && clad) measurements = clad.measurements;
   state.scanResult = {
-    measurements,
+    measurements: measurements || {},
     composition,
     appendicularLeanMassKg,
     captureQuality,
-    analysisProvider: bodyComp ? 'BodyComp' : 'Clad',
+    analysisProvider: bodyComp ? "BodyComp" : "Clad",
     cladMeasurements,
     cladHas3dModel: Boolean(clad?.has3dModel),
-    crossCheck,
+    crossCheck: compareScanEngines(bodyComp ? measurements : null, cladMeasurements),
     engines: {
-      bodyComp: bodyComp ? 'completed' : 'unavailable',
-      clad: clad ? 'completed' : (cladEnabled ? 'unavailable' : 'not-authorized')
+      bodyComp: bodyComp ? "completed" : "unavailable",
+      clad: clad ? "completed" : (canRunClad ? "unavailable" : "not-used")
     },
     createdAt: new Date().toISOString()
   };
@@ -213,18 +241,15 @@ async function runBodyScan() {
   renderScanResult();
   renderPlan();
   renderDiet();
-  $('#capture-status').textContent = bodyComp && clad
-    ? 'Análisis completado. Las medidas de los dos sistemas se muestran por separado.'
-    : bodyComp
-      ? (cladEnabled ? 'El análisis corporal está listo. La reconstrucción 3D no estuvo disponible.' : 'Análisis corporal completado.')
-      : 'La reconstrucción 3D y las medidas están listas. La composición corporal no está disponible en este resultado.';
-  $('#pose-pair-summary').textContent = 'Tus fotos se procesaron según los servicios autorizados.';
-  $('#view-personal-plan')?.classList.remove('hidden');
-  toast('Análisis completado. Tu plan está preparado.');
+  $('#capture-status').textContent = bodyComp
+    ? "Composición corporal y medidas estimadas listas. Revisa también el margen de incertidumbre."
+    : "Se han obtenido algunas medidas. La composición de grasa y músculo no pudo estimarse con fiabilidad.";
+  $('#pose-pair-summary').textContent = "Análisis realizado con las fotografías disponibles.";
+  $('#view-personal-plan')?.classList.remove("hidden");
+  toast("Análisis completado.");
 }
 
 '''
-app = app[:start] + new_scan + app[end:]
 
 # Replace result renderer so either engine can provide perimeter estimates.
 render_start = app.index("function renderScanResult() {")
@@ -233,67 +258,123 @@ new_render = '''function renderScanResult() {
   const root = $('#scan-result');
   if (!root) return;
   const result = state.scanResult;
-  if (result?.visualFallback) {
-    root.innerHTML = '<section class="scan-visual-fallback" aria-label="Orientación visual aproximada"><h3>Orientación visual aproximada</h3><div class="scan-visual-fallback-text">' +
-      escapeHTML(result.visualFallback.text)
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/^\s*\*\s+/gm, '• ')
-        .replace(/\s+\*(?=\s|$)/g, '')
-        .replace(/\\r?\\n/g, '<br>') +
-      '</div><small>Esta orientación no es una medición. Solo puede dar un rango visual muy aproximado cuando las dos fotos son aptas. No calcula perímetros ni masa muscular en kg.</small></section>';
-    $('#view-personal-plan')?.classList.add('hidden');
+  if (!result) {
+    root.innerHTML = '<div class="composition-empty"><span class="composition-empty-mark">◌</span><p>Tu análisis aparecerá aquí cuando envíes una fotografía.</p></div>';
+    $('#view-personal-plan')?.classList.add("hidden");
     return;
   }
-  if (!result?.measurements) {
-    root.innerHTML = '<p class="muted">Tu resultado aparecerá aquí después del análisis.</p>';
-    $('#view-personal-plan')?.classList.add('hidden');
-    return;
-  }
-  const m = result.measurements, c = result.composition;
-  const fat = c ? (c.bodyFatPercent === null ? fmt(c.bodyFatLow,1) + '–' + fmt(c.bodyFatHigh,1) + '%' : '≈ ' + fmt(c.bodyFatPercent,1) + '%') : 'No disponible';
-  const fatMass = c ? (Number.isFinite(c.fatMassKg) ? fmt(c.fatMassKg,1) + ' kg' : fmt(c.fatMassLowKg,1) + '–' + fmt(c.fatMassHighKg,1) + ' kg') : '—';
-  const leanMass = c ? (Number.isFinite(c.fatFreeMassKg) ? fmt(c.fatFreeMassKg,1) + ' kg' : fmt(c.fatFreeMassLowKg,1) + '–' + fmt(c.fatFreeMassHighKg,1) + ' kg') : '—';
-  const circumferenceSource = result.analysisProvider === 'Clad' ? 'Clad · modelo 3D' : 'BodyComp · análisis fotográfico';
-  root.innerHTML =
-    '<div class="scan-result-grid">' +
-    '<article class="scan-result-card featured"><small>GRASA CORPORAL ESTIMADA</small><strong>' + fat + '</strong><span>' + (c ? 'Estimación orientativa de BodyComp' : 'No estimada por Clad') + '</span></article>' +
-    '<article class="scan-result-card"><small>MASA GRASA</small><strong>' + fatMass + '</strong></article>' +
-    '<article class="scan-result-card"><small>MASA LIBRE DE GRASA</small><strong>' + leanMass + '</strong></article>' +
-    '<article class="scan-result-card"><small>CINTURA ESTIMADA</small><strong>' + fmt(m.waist?.circumferenceCm,1) + ' cm</strong></article>' +
-    '<article class="scan-result-card"><small>PECHO / BUSTO ESTIMADO</small><strong>' + fmt(m.chest?.circumferenceCm,1) + ' cm</strong></article>' +
-    '<article class="scan-result-card"><small>CADERA ESTIMADA</small><strong>' + fmt(m.hip?.circumferenceCm,1) + ' cm</strong></article>' +
-    '<article class="scan-result-card"><small>MASA MAGRA APENDICULAR</small><strong>' + (Number.isFinite(result.appendicularLeanMassKg) ? fmt(result.appendicularLeanMassKg,1) + ' kg' : 'No estimada') + '</strong><span>No equivale a toda la masa muscular.</span></article>' +
-    '</div><p class="scan-result-note">' + circumferenceSource + '. Las medidas fotográficas son aproximadas; no se promediaron resultados de modelos distintos.</p>';
 
-  if (result.cladMeasurements) {
-    const rows = [
-      ['Cintura', 'waist'],
-      ['Cadera', 'hip'],
-      ['Pecho', 'chest'],
-      ['Muslo', 'thigh'],
-      ['Brazo', 'bicep']
-    ];
-    const content = rows.map(([label, key]) => {
-      const bodyCompValue = Number(m[key]?.circumferenceCm);
-      const cladValue = Number(result.cladMeasurements[key]?.circumferenceCm);
-      const difference = Number(result.crossCheck?.[key]);
-      if (!Number.isFinite(cladValue)) return '';
-      return '<tr><td>' + label + '</td><td>' + (Number.isFinite(bodyCompValue) ? fmt(bodyCompValue,1) + ' cm' : '—') +
-        '</td><td>' + fmt(cladValue,1) + ' cm</td><td>' + (Number.isFinite(difference) ? fmt(difference,1) + ' cm' : '—') + '</td></tr>';
-    }).join('');
-    root.insertAdjacentHTML('beforeend',
-      '<details class="scan-result-note"><summary>Comparar las medidas de los dos análisis</summary>' +
-      '<table><thead><tr><th>Medida</th><th>BodyComp</th><th>Clad</th><th>Diferencia</th></tr></thead><tbody>' + content + '</tbody></table>' +
-      '<p>Son estimaciones de dos sistemas diferentes, no dos mediciones clínicas. FORMA no las promedia. La reconstrucción 3D ' +
-      (result.cladHas3dModel ? 'devolvió un modelo 3D.' : 'no devolvió un archivo 3D.') + '</p></details>');
+  if (result.visualFallback) {
+    const visualHtml = escapeHTML(result.visualFallback.text || "")
+      .replace(/^#{1,3}\\s*(.+)$/gm, '<h4>$1</h4>')
+      .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+      .replace(/^[-•]\\s+(.+)$/gm, '<div class="visual-report-line">• $1</div>')
+      .replace(/\\r?\\n/g, '<br>');
+    root.innerHTML =
+      '<section class="scan-composition-report visual-only-report">' +
+        '<div class="composition-report-top"><span class="composition-brand">FORMA / BODY INSIGHT</span><span class="composition-status">LECTURA VISUAL</span></div>' +
+        '<div class="composition-report-heading"><span class="composition-eyebrow">ANÁLISIS DE FOTOGRAFÍA</span><h2>Esto es lo que muestran tus fotos</h2><p>Lectura visual adaptada a las zonas que aparecen en la imagen.</p></div>' +
+        '<div class="visual-report-copy">' + visualHtml + '</div>' +
+        '<div class="composition-disclaimer"><span>i</span><p>La lectura visual no es una medición. FORMA no inventa perímetros ni kilos de músculo cuando la fotografía no permite calcularlos.</p></div>' +
+      '</section>';
+    $('#view-personal-plan')?.classList.add("hidden");
+    return;
   }
-  $('#view-personal-plan')?.classList.remove('hidden');
+
+  const m = result.measurements || {};
+  const c = result.composition;
+  const fatPercent = Number(c?.bodyFatPercent);
+  const hasFat = Boolean(c && Number.isFinite(fatPercent));
+  const ringPercent = hasFat ? Math.max(0, Math.min(100, fatPercent)) : 0;
+  const fat = hasFat ? fmt(fatPercent, 1) + "%" : "No disponible";
+  const fatRange = hasFat ? fmt(c.bodyFatLow, 1) + "–" + fmt(c.bodyFatHigh, 1) + "%" : "";
+  const fatMass = c && Number.isFinite(Number(c.fatMassKg)) ? fmt(c.fatMassKg, 1) + " kg" : "—";
+  const leanMass = c && Number.isFinite(Number(c.fatFreeMassKg)) ? fmt(c.fatFreeMassKg, 1) + " kg" : "—";
+  const muscleMass = Number.isFinite(Number(result.appendicularLeanMassKg))
+    ? fmt(result.appendicularLeanMassKg, 1) + " kg"
+    : "No disponible";
+  const source = result.analysisProvider === "Clad" ? "Reconstrucción a partir de fotografía" : "Modelo BodyComp · análisis fotográfico";
+  const measurementRows = [
+    ["Cintura", m.waist?.circumferenceCm],
+    ["Cadera", m.hip?.circumferenceCm],
+    ["Pecho / busto", m.chest?.circumferenceCm],
+    ["Muslo", m.thigh?.circumferenceCm],
+    ["Brazo", m.bicep?.circumferenceCm]
+  ].filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0);
+  const measurementsHtml = measurementRows.length
+    ? measurementRows.map(([label, value]) =>
+        '<div class="composition-measure-row"><span>' + label + '</span><strong>' + fmt(value, 1) + '<small> cm</small></strong></div>'
+      ).join("")
+    : '<p class="composition-muted">No se obtuvieron perímetros fiables en esta toma.</p>';
+
+  const compositionVisual = hasFat
+    ? '<div class="composition-visual">' +
+        '<div class="composition-ring" style="--fat-value:' + ringPercent + '%"><div class="composition-ring-center"><strong>' + fat + '</strong><span>GRASA</span></div></div>' +
+        '<div class="composition-legend">' +
+          '<div><i class="legend-dot legend-fat"></i><span>Grasa corporal</span><strong>' + fat + '</strong></div>' +
+          '<div><i class="legend-dot legend-lean"></i><span>Masa libre de grasa</span><strong>' + (c && Number.isFinite(Number(c.fatFreeMassKg)) ? leanMass : "—") + '</strong></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="composition-proportion"><div class="composition-proportion-label"><span>Distribución estimada</span><strong>' + fat + ' / ' + fmt(100 - ringPercent, 1) + '%</strong></div><div class="composition-proportion-track"><span class="proportion-fat" style="width:' + ringPercent + '%"></span><span class="proportion-lean" style="width:' + (100 - ringPercent) + '%"></span></div><div class="composition-proportion-legend"><span>Grasa</span><span>Masa libre de grasa</span></div></div>'
+    : '<div class="composition-unavailable"><span class="composition-unavailable-icon">◌</span><div><strong>Composición no estimada</strong><p>La foto permitió obtener algunas medidas, pero no hay base suficiente para mostrar un porcentaje de grasa corporal fiable.</p></div></div>';
+
+  root.innerHTML =
+    '<section class="scan-composition-report">' +
+      '<div class="composition-report-top"><span class="composition-brand">FORMA / BODY INSIGHT</span><span class="composition-status">ANÁLISIS COMPLETADO</span></div>' +
+      '<div class="composition-report-heading"><span class="composition-eyebrow">TU INFORME CORPORAL</span><h2>Composición corporal</h2><p>Una lectura de los datos disponibles en tu análisis.</p></div>' +
+      '<div class="composition-hero">' +
+        '<div class="composition-main-metric"><span>GRASA CORPORAL ESTIMADA</span><strong>' + fat + '</strong><small>' + (hasFat ? "Rango orientativo: " + fatRange : "No calculada por este análisis") + '</small></div>' +
+        compositionVisual +
+      '</div>' +
+      '<div class="composition-section">' +
+        '<div class="composition-section-heading"><span>01</span><div><h3>Distribución corporal</h3><p>Estimaciones derivadas del análisis, no mediciones clínicas.</p></div></div>' +
+        '<div class="composition-data-row"><span>Masa grasa</span><strong>' + fatMass + '</strong></div>' +
+        '<div class="composition-data-row"><span>Masa libre de grasa</span><strong>' + leanMass + '</strong></div>' +
+        '<div class="composition-data-row"><span>Masa magra apendicular</span><strong>' + muscleMass + '</strong></div>' +
+        '<p class="composition-footnote">La masa magra apendicular no equivale a toda la masa muscular del cuerpo.</p>' +
+      '</div>' +
+      '<div class="composition-section">' +
+        '<div class="composition-section-heading"><span>02</span><div><h3>Medidas corporales</h3><p>Perímetros estimados que el modelo pudo recuperar.</p></div></div>' +
+        '<div class="composition-measure-list">' + measurementsHtml + '</div>' +
+      '</div>' +
+      '<div class="composition-report-footer"><div class="composition-source"><span class="composition-source-dot"></span><span>' + source + '</span></div><div class="composition-disclaimer"><span>i</span><p>Las estimaciones fotográficas pueden variar con el encuadre, la ropa, la postura y la iluminación. Úsalas para observar tendencias, no como sustituto de una medición profesional.</p></div></div>' +
+    '</section>';
+
+  if (result.cladMeasurements && result.analysisProvider === "BodyComp") {
+    const rows = [["Cintura","waist"],["Cadera","hip"],["Pecho","chest"],["Muslo","thigh"],["Brazo","bicep"]];
+    const tableRows = rows.map(([label,key]) => {
+      const a = Number(m[key]?.circumferenceCm), b = Number(result.cladMeasurements[key]?.circumferenceCm);
+      if (!Number.isFinite(b)) return "";
+      return '<div class="composition-measure-row"><span>' + label + '</span><strong>' + (Number.isFinite(a) ? fmt(a,1) + " / " : "") + fmt(b,1) + '<small> cm · Clad</small></strong></div>';
+    }).join("");
+    root.insertAdjacentHTML("beforeend", '<details class="composition-comparison"><summary>Ver contraste entre sistemas</summary>' + tableRows + '<p>Los sistemas pueden diferir. FORMA conserva sus resultados por separado y no los promedia.</p></details>');
+  }
+  $('#view-personal-plan')?.classList.remove("hidden");
 }
 
-'''
-app = app[:render_start] + new_render + app[render_end:]
+'''app = app[:render_start] + new_render + app[render_end:]
 
 # The unified scanner privacy notice is inserted by forma-integrate.py.
+app += """
+/* Accept one or two photos. Keep numeric services optional; always allow visual analysis. */
+(() => {
+  const scanButton = $('#analyze-body-scan');
+  if (!scanButton) return;
+  const originalUpdateScanButton = updateScanButton;
+  updateScanButton = function () {
+    if (typeof originalUpdateScanButton === 'function') originalUpdateScanButton();
+    const hasAnyPhoto = Boolean(capturedUrls.front || capturedUrls.side);
+    scanButton.disabled = !hasAnyPhoto;
+    scanButton.textContent = 'Analizar mis fotos';
+  };
+  scanButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void runBodyScan();
+  }, true);
+  updateScanButton();
+})();
+"""
 app_path.write_text(app, encoding="utf-8")
 
 # Include all new code in syntax checks.
@@ -356,6 +437,354 @@ css += """
   color:var(--muted,#5d6d7d);
   font-size:12px;
   line-height:1.5;
+}
+"""
+css_path.write_text(css, encoding="utf-8")
+
+
+# FORMA visual identity refresh — premium dark, editorial, less box-heavy UI.
+css_path = ROOT / "src/ui/styles.css"
+css = css_path.read_text(encoding="utf-8")
+css += """
+:root {
+  color-scheme: dark;
+  --bg:#0b1114;
+  --panel:#121b1f;
+  --panel-2:#182428;
+  --line:rgba(201,232,218,.13);
+  --text:#f1f6f3;
+  --muted:#9aada5;
+  --green:#b9f2d2;
+  --green-2:#78d7a7;
+  --mint:rgba(185,242,210,.10);
+  --accent:#b9f2d2;
+  --shadow:0 18px 44px rgba(0,0,0,.22);
+}
+html { background:var(--bg); }
+body {
+  background:
+    radial-gradient(ellipse at 85% -12%, rgba(105,190,143,.12), transparent 36%),
+    radial-gradient(ellipse at -12% 44%, rgba(88,135,119,.08), transparent 34%),
+    var(--bg) !important;
+  color:var(--text) !important;
+  font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing:.005em;
+}
+h1,h2,h3,h4 { color:var(--text); letter-spacing:-.035em; }
+.sidebar,.topbar,.mobile-nav {
+  background:rgba(12,19,22,.94) !important;
+  color:var(--text) !important;
+  border-color:var(--line) !important;
+  backdrop-filter:blur(18px);
+}
+.brand strong,.mobile-brand { color:var(--text) !important; }
+.brand small,.sidebar-label,.eyebrow,.topbar-context,.nav-item,.mobile-nav-item { color:var(--muted) !important; }
+.nav-item { border-radius:13px; }
+.nav-item:hover,.nav-item.active {
+  background:rgba(185,242,210,.10) !important;
+  color:var(--green) !important;
+}
+.nav-item.active { box-shadow:inset 3px 0 var(--green); }
+.topbar { border-bottom:1px solid var(--line); }
+.local-pill,.avatar { background:var(--mint) !important; color:var(--green) !important; border-color:var(--line) !important; }
+.panel,.metric-card,.capture-slot,.capture-panel,.scan-instructions,.summary-tile,.calorie-box,.coach-panel {
+  background:linear-gradient(145deg,rgba(24,36,40,.96),rgba(16,25,29,.98)) !important;
+  color:var(--text) !important;
+  border:1px solid var(--line) !important;
+  border-radius:22px !important;
+  box-shadow:var(--shadow);
+}
+.panel { padding:clamp(16px,3vw,26px); }
+.metric-card { border-radius:19px !important; }
+.metric-top,.metric-foot,.metric-value small,.muted,.muted-text { color:var(--muted) !important; }
+.metric-symbol,.history-count,.history-values span,.trend-number { color:var(--green) !important; }
+.button-primary,.send-button {
+  background:linear-gradient(135deg,#c5f5d9,#82d9ad) !important;
+  color:#102018 !important;
+  border:0 !important;
+  border-radius:999px !important;
+  font-weight:750;
+  box-shadow:0 8px 24px rgba(120,215,167,.14);
+}
+.button-primary:hover,.send-button:hover { filter:brightness(1.06); }
+.button-secondary,.suggested-prompts button {
+  background:rgba(185,242,210,.09) !important;
+  border:1px solid rgba(185,242,210,.20) !important;
+  color:var(--green) !important;
+  border-radius:999px !important;
+}
+.button-ghost { background:rgba(255,255,255,.035) !important; border-color:var(--line) !important; color:var(--text) !important; border-radius:999px !important; }
+.notice-neutral,.capture-status,.privacy-note,.nutrition-reminder,.coach-bubble {
+  background:rgba(185,242,210,.08) !important;
+  border-color:rgba(185,242,210,.18) !important;
+  color:var(--text) !important;
+  border-radius:16px;
+}
+.notice-warning { background:rgba(205,156,81,.10) !important; border-color:rgba(205,156,81,.24) !important; }
+.capture-preview { background:#0c1417 !important; border-color:var(--line) !important; border-radius:18px !important; }
+.scan-result-card,.summary-tile { background:rgba(255,255,255,.025) !important; border-color:var(--line) !important; }
+.scan-result-card strong,.summary-tile strong,.metric-value { color:var(--text) !important; }
+.scan-result-card small,.summary-tile small { color:var(--muted) !important; }
+.workout-day,.macro-row,.history-row,.coach-header,.chat-input-row { border-color:var(--line) !important; }
+.workout-day li,.coach-rule { color:#c1d0c9 !important; }
+.user-bubble { background:#b9f2d2 !important; color:#102018 !important; border-radius:18px 18px 4px 18px; }
+.coach-bubble { background:#1c292d !important; color:#edf5f0 !important; border-radius:18px 18px 18px 4px; }
+.chat-input-row input,input,select,textarea {
+  background:#0f191d !important;
+  color:var(--text) !important;
+  border-color:var(--line) !important;
+  border-radius:14px !important;
+}
+.mobile-nav {
+  border-top:1px solid var(--line) !important;
+  box-shadow:0 -10px 34px rgba(0,0,0,.28);
+}
+.mobile-nav-item.active { color:var(--green) !important; }
+.mobile-nav-item.active span { background:rgba(185,242,210,.12) !important; border-radius:13px; }
+:where(button,input,select,textarea,[tabindex]):focus-visible { outline:3px solid var(--green); outline-offset:3px; }
+button:disabled { opacity:.45; }
+.scan-privacy-note,.coach-privacy-note {
+  background:rgba(185,242,210,.06) !important;
+  border-left:3px solid var(--green) !important;
+  color:var(--muted) !important;
+  border-radius:0 12px 12px 0;
+  font-size:12px;
+  line-height:1.55;
+}
+@media(max-width:760px) {
+  .content-wrap { padding-top:18px; }
+  .panel { border-radius:20px !important; }
+  .mobile-nav { padding-top:8px; }
+  .mobile-nav-item small { font-size:9px; }
+}
+
+/* The body-composition report is editorial and graphic — no grids of square cards. */
+#scan-result { width:100%; min-width:0; }
+.scan-composition-report {
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  overflow:hidden;
+  padding:clamp(18px,4vw,30px);
+  color:#eef6f1;
+  background:
+    radial-gradient(circle at 90% 5%, rgba(130,217,173,.13), transparent 30%),
+    linear-gradient(150deg,#18272a 0%,#111a1e 62%,#0e171a 100%);
+  border:1px solid rgba(185,242,210,.15);
+  border-radius:26px;
+  box-shadow:0 24px 58px rgba(0,0,0,.28);
+}
+.composition-report-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  flex-wrap:wrap;
+  padding-bottom:17px;
+  border-bottom:1px solid rgba(221,241,229,.13);
+}
+.composition-brand {
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.18em;
+  color:#b9f2d2;
+}
+.composition-status {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 10px;
+  border:1px solid rgba(185,242,210,.20);
+  border-radius:999px;
+  color:#b9f2d2;
+  background:rgba(185,242,210,.07);
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.12em;
+}
+.composition-status:before {
+  content:"";
+  width:6px;height:6px;border-radius:50%;background:#91e0b4;
+  box-shadow:0 0 12px rgba(145,224,180,.65);
+}
+.composition-report-heading { padding:25px 0 22px; }
+.composition-eyebrow {
+  color:#91caaa;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.2em;
+}
+.composition-report-heading h2 {
+  margin:8px 0 7px;
+  font-size:clamp(25px,6vw,34px);
+  line-height:1.06;
+  font-weight:760;
+  color:#f4faf6;
+}
+.composition-report-heading p {
+  margin:0;
+  color:#9aada5;
+  font-size:13px;
+  line-height:1.5;
+}
+.composition-hero {
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(120px,.9fr);
+  align-items:center;
+  gap:clamp(14px,4vw,34px);
+  padding:21px 0 24px;
+  border-top:1px solid rgba(221,241,229,.10);
+  border-bottom:1px solid rgba(221,241,229,.10);
+}
+.composition-main-metric { min-width:0; }
+.composition-main-metric>span {
+  display:block;
+  color:#9eb5a9;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.16em;
+  line-height:1.45;
+}
+.composition-main-metric>strong {
+  display:block;
+  margin:8px 0 6px;
+  color:#c5f5d9;
+  font-size:clamp(42px,11vw,64px);
+  font-weight:760;
+  line-height:.98;
+  letter-spacing:-.065em;
+  font-variant-numeric:tabular-nums;
+}
+.composition-main-metric>small {
+  color:#9aada5;
+  font-size:11px;
+  line-height:1.4;
+}
+.composition-visual { display:flex; align-items:center; justify-content:center; gap:16px; min-width:0; }
+.composition-ring {
+  --fat-value:0%;
+  flex:0 0 auto;
+  width:clamp(112px,30vw,152px);
+  aspect-ratio:1;
+  display:grid;
+  place-items:center;
+  border-radius:50%;
+  background:conic-gradient(#9ce3bb var(--fat-value),rgba(223,243,231,.11) 0);
+  position:relative;
+  box-shadow:0 0 28px rgba(125,218,166,.08);
+}
+.composition-ring:before {
+  content:"";
+  position:absolute;
+  inset:9px;
+  border-radius:50%;
+  background:#162327;
+  border:1px solid rgba(221,241,229,.12);
+}
+.composition-ring-center { position:relative; z-index:1; display:grid; gap:2px; text-align:center; }
+.composition-ring-center strong { font-size:21px; font-weight:800; color:#f1f8f3; letter-spacing:-.04em; }
+.composition-ring-center span { font-size:8px; font-weight:800; letter-spacing:.17em; color:#96b3a2; }
+.composition-legend { display:grid; gap:10px; min-width:0; }
+.composition-legend>div { display:grid; grid-template-columns:8px minmax(0,1fr); align-items:center; column-gap:7px; row-gap:2px; }
+.composition-legend>div strong { grid-column:2; color:#e9f4ed; font-size:12px; font-variant-numeric:tabular-nums; }
+.composition-legend>div span { color:#9aada5; font-size:10px; line-height:1.2; }
+.legend-dot { width:7px;height:7px;border-radius:50%; }
+.legend-fat { background:#9ce3bb; }
+.legend-lean { background:#50635a; }
+.composition-proportion { padding:18px 0 10px; }
+.composition-proportion-label,.composition-proportion-legend {
+  display:flex; justify-content:space-between; align-items:center; gap:12px;
+}
+.composition-proportion-label { margin-bottom:9px; color:#c5d6cc; font-size:11px; }
+.composition-proportion-label strong { color:#f0f7f2; font-variant-numeric:tabular-nums; }
+.composition-proportion-track { width:100%; height:10px; display:flex; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.08); }
+.proportion-fat { background:linear-gradient(90deg,#9ce3bb,#c0f3d2); }
+.proportion-lean { background:#4d6258; }
+.composition-proportion-legend { margin-top:7px; color:#83978d; font-size:9px; }
+.composition-section { padding:23px 0 4px; border-bottom:1px solid rgba(221,241,229,.10); }
+.composition-section-heading { display:flex; align-items:flex-start; gap:13px; margin-bottom:13px; }
+.composition-section-heading>span { color:#8bd5aa; font-size:11px; font-weight:850; letter-spacing:.1em; padding-top:4px; }
+.composition-section-heading h3 { margin:0; color:#f0f7f2; font-size:17px; letter-spacing:-.03em; }
+.composition-section-heading p { margin:4px 0 0; color:#8fa49a; font-size:11px; line-height:1.4; }
+.composition-data-row,.composition-measure-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-height:43px;
+  border-bottom:1px solid rgba(221,241,229,.075);
+}
+.composition-data-row:last-of-type,.composition-measure-row:last-child { border-bottom:0; }
+.composition-data-row>span,.composition-measure-row>span { color:#bccdc3; font-size:12px; }
+.composition-data-row>strong,.composition-measure-row>strong {
+  color:#f2f8f4;
+  font-size:14px;
+  font-weight:750;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+.composition-measure-row>strong small { color:#91a79a; font-size:10px; font-weight:600; }
+.composition-footnote { margin:8px 0 12px; color:#81958b; font-size:10px; line-height:1.5; }
+.composition-muted { color:#9aada5; font-size:12px; padding:10px 0; }
+.composition-unavailable {
+  display:flex; align-items:center; gap:14px;
+  padding:18px 0;
+  border-top:1px solid rgba(221,241,229,.10);
+  border-bottom:1px solid rgba(221,241,229,.10);
+}
+.composition-unavailable-icon { color:#9ce3bb; font-size:32px; }
+.composition-unavailable strong { display:block; color:#f0f7f2; font-size:14px; }
+.composition-unavailable p { margin:4px 0 0; color:#97aaa0; font-size:11px; line-height:1.5; }
+.composition-report-footer { padding-top:17px; }
+.composition-source { display:flex; align-items:center; gap:8px; color:#9ab0a3; font-size:10px; }
+.composition-source-dot { width:6px;height:6px;border-radius:50%;background:#9ce3bb; }
+.composition-disclaimer {
+  display:flex; align-items:flex-start; gap:10px;
+  margin-top:15px; padding:12px 13px;
+  border-radius:12px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(221,241,229,.08);
+}
+.composition-disclaimer>span { flex:0 0 18px; height:18px; display:grid; place-items:center; border-radius:50%; background:rgba(185,242,210,.12); color:#b9f2d2; font-size:11px; font-weight:800; }
+.composition-disclaimer p { margin:0; color:#96a99f; font-size:10px; line-height:1.55; }
+.composition-comparison { margin-top:15px; color:#d7e6dc; border-top:1px solid rgba(221,241,229,.12); padding-top:13px; }
+.composition-comparison summary { color:#b9f2d2; font-size:11px; font-weight:750; cursor:pointer; }
+.composition-comparison>p { color:#91a49a; font-size:10px; line-height:1.5; }
+.visual-only-report .composition-report-heading { padding-bottom:17px; }
+.visual-report-copy {
+  color:#dce9e1;
+  font-size:13px;
+  line-height:1.75;
+  overflow-wrap:anywhere;
+  word-break:normal;
+  padding:16px 0 5px;
+}
+.visual-report-copy h4 {
+  margin:13px 0 4px;
+  color:#b9f2d2;
+  font-size:11px;
+  font-weight:850;
+  letter-spacing:.12em;
+}
+.visual-report-copy strong { color:#f3faf5; font-weight:800; }
+.visual-report-line { margin:4px 0; }
+.composition-empty {
+  padding:28px 18px;
+  text-align:center;
+  color:#9aada5;
+  border:1px dashed rgba(185,242,210,.20);
+  border-radius:18px;
+  background:rgba(185,242,210,.035);
+}
+.composition-empty-mark { display:block; color:#a8e8c2; font-size:33px; margin-bottom:8px; }
+.composition-empty p { margin:0; font-size:12px; line-height:1.5; }
+@media(max-width:420px) {
+  .scan-composition-report { padding:17px 15px; border-radius:21px; }
+  .composition-hero { grid-template-columns:minmax(0,1fr); gap:17px; }
+  .composition-main-metric>strong { font-size:54px; }
+  .composition-visual { justify-content:flex-start; }
+  .composition-ring { width:122px; }
+  .composition-legend { flex:1; }
 }
 """
 css_path.write_text(css, encoding="utf-8")
