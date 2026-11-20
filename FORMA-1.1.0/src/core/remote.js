@@ -18,7 +18,7 @@ async function apiBaseUrl() {
   return base;
 }
 
-async function post(path, payload) {
+async function requestJson(path, payload) {
   const base = await apiBaseUrl();
   const response = await fetch(base + path, {
     method: "POST",
@@ -27,14 +27,25 @@ async function post(path, payload) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "No se pudo completar la solicitud.");
-  if (!data.text || typeof data.text !== "string") throw new Error("La respuesta no estaba disponible.");
+  return data;
+}
+
+export async function askFormaCoach(payload) {
+  const data = await requestJson("/api/coach", payload);
+  if (typeof data.text !== "string" || !data.text.trim()) throw new Error("La respuesta no estaba disponible.");
   return data.text;
 }
 
-export function askFormaCoach(payload) {
-  return post("/api/coach", payload);
+export async function askFormaVisualFallback(payload) {
+  const data = await requestJson("/api/scan-fallback", payload);
+  if (typeof data.text !== "string" || !data.text.trim()) throw new Error("La respuesta visual no estaba disponible.");
+  return data.text;
 }
 
-export function askFormaVisualFallback(payload) {
-  return post("/api/scan-fallback", payload);
+export function startCladPhotoJob(payload) {
+  return requestJson("/api/clad/scan", payload);
+}
+
+export function pollCladPhotoJob(payload) {
+  return requestJson("/api/clad/poll", payload);
 }
