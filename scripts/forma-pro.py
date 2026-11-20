@@ -19,7 +19,7 @@ if button not in html:
     button = '              <button class="button button-primary full-width analyze-button" id="analyze-body-scan" disabled>Analizar mi físico</button>'
 if button not in html:
     raise SystemExit("Scanner action button was not found; refusing to inject consent controls in an unknown location.")
-if 'id="scan-cloud-consent"' in html or 'id="scan-clad-consent"' in html:
+if 'id="scan-cloud-consent"' in html or 'id="forma-clad-consent"' in html:
     raise SystemExit("Scanner consent controls already exist; refusing to duplicate them.")
 
 privacy = re.search(r'<p class="scan-privacy-note">.*?</p>', html, flags=re.S)
@@ -36,8 +36,8 @@ consent = '''
                 <input id="scan-cloud-consent" type="checkbox">
                 <span><strong>Permitir lectura visual con Gemini</strong><small>Envía las fotografías seleccionadas a Google para describir las zonas visibles si los cálculos locales no están disponibles. Opcional.</small></span>
               </label>
-              <label class="forma-consent-row" for="scan-clad-consent">
-                <input id="scan-clad-consent" type="checkbox">
+              <label class="forma-consent-row" for="forma-clad-consent">
+                <input id="forma-clad-consent" type="checkbox">
                 <span><strong>Permitir reconstrucción de medidas con Clad</strong><small>Envía la foto frontal y la estatura a Clad para intentar obtener perímetros. Servicio externo y opcional.</small></span>
               </label>
 '''
@@ -50,7 +50,7 @@ app = once(
     app,
     '  const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());',
     '''  const cloudAnalysisAllowed = $('#scan-cloud-consent')?.checked === true;
-  const cladAnalysisAllowed = $('#scan-clad-consent')?.checked === true;
+  const cladAnalysisAllowed = $('#forma-clad-consent')?.checked === true;
   const visualPromise = cloudAnalysisAllowed
     ? Promise.resolve().then(() => runGeminiPhotoFallback())
     : Promise.resolve(null);''',
@@ -293,7 +293,7 @@ css_path.write_text(css, encoding="utf-8")
 
 # Build-time invariants: fail early if a later generator change drops a feature.
 check = app_path.read_text(encoding="utf-8")
-for required in ["scan-cloud-consent", "scan-clad-consent", "forma-scan-history", "preserve partial"]:
+for required in ["scan-cloud-consent", "forma-clad-consent", "forma-scan-history", "preserve partial"]:
     if required == "preserve partial":
         continue
     if required not in (html + check):
