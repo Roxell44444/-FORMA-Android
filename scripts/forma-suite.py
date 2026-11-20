@@ -116,7 +116,7 @@ function formaSuiteScanHistory() {
 }
 
 function formaSuiteTrend(items, field, suffix) {
-  const values = items.filter(item => Number.isFinite(Number(item[field]))).slice(-8);
+  const values = items.filter(item => item[field] !== null && item[field] !== undefined && item[field] !== "" && Number.isFinite(Number(item[field]))).slice(-8);
   if (!values.length) return '<p class="fs-muted">Todavía no hay registros de esta métrica.</p>';
   const rows = values.slice(-5).reverse().map(item =>
     '<div class="fs-history-row"><span>' + formaSuiteEscape(formaSuiteDateLabel(String(item.date).slice(0, 10))) +
@@ -144,13 +144,13 @@ function formaSuiteProgressHtml() {
   const latestScan = scans[scans.length - 1];
   const scanSummary = latestScan
     ? '<div class="fs-stat"><span>Último escáner guardado</span><strong>' +
-      (Number.isFinite(Number(latestScan.bodyFatPercent)) ? Number(latestScan.bodyFatPercent).toFixed(1) + "% grasa estimada" : "Lectura visual o parcial") +
+      (latestScan.bodyFatPercent !== null && Number.isFinite(Number(latestScan.bodyFatPercent)) ? Number(latestScan.bodyFatPercent).toFixed(1) + "% grasa estimada" : "Lectura visual o parcial") +
       '</strong><small>' + formaSuiteEscape(latestScan.source || "IA") + " · " + formaSuiteEscape(formaSuiteDateLabel(String(latestScan.date).slice(0, 10))) + '</small></div>'
     : '<div class="fs-stat"><span>Historial de escáner</span><strong>Sin registros todavía</strong><small>Los resultados se guardan localmente sin las fotografías.</small></div>';
   return '<section class="fs-grid">' +
     '<div class="fs-card fs-wide"><span class="fs-kicker">ESCÁNER · CALIDAD</span><h3>' + latest.title + '</h3><p>' + latest.detail + '</p>' + scanSummary + '</div>' +
     '<div class="fs-card"><span class="fs-kicker">PESO · REGISTROS MANUALES</span><h3>' + (latestManual && Number.isFinite(Number(latestManual.weightKg)) ? Number(latestManual.weightKg).toFixed(1) + " kg" : "—") + '</h3>' + formaSuiteTrend(manual, "weightKg", "kg") + '</div>' +
-    '<div class="fs-card"><span class="fs-kicker">CINTURA · REGISTROS MANUALES</span><h3>' + (latestManual && Number.isFinite(Number(latestManual.waistCm)) ? Number(latestManual.waistCm).toFixed(1) + " cm" : "—") + '</h3>' + formaSuiteTrend(manual, "waistCm", "cm") + '</div>' +
+    '<div class="fs-card"><span class="fs-kicker">CINTURA · REGISTROS MANUALES</span><h3>' + (latestManual && latestManual.waistCm !== null && Number.isFinite(Number(latestManual.waistCm)) ? Number(latestManual.waistCm).toFixed(1) + " cm" : "—") + '</h3>' + formaSuiteTrend(manual, "waistCm", "cm") + '</div>' +
     '</section>' +
     '<section class="fs-card"><span class="fs-kicker">AÑADIR MEDICIÓN</span><h3>Registra tus medidas</h3><p>Estos datos se guardan como mediciones manuales y nunca se mezclan con las estimaciones del escáner.</p>' +
     '<form id="fs-measure-form" class="fs-form"><label>Fecha<input name="date" type="date" value="' + formaSuiteToday() + '" required></label>' +
@@ -230,7 +230,7 @@ function formaSuiteReviewHtml() {
   const minutes = workouts.reduce((sum, item) => sum + (Number(item.minutes) || 0), 0);
   const protein = meals.reduce((sum, item) => sum + (Number(item.protein) || 0), 0);
   const calories = meals.reduce((sum, item) => sum + (Number(item.calories) || 0), 0);
-  const sleep = habits.filter(item => Number.isFinite(Number(item.sleepHours)));
+  const sleep = habits.filter(item => item.sleepHours !== null && item.sleepHours !== undefined && Number.isFinite(Number(item.sleepHours)));
   const sleepAverage = sleep.length ? (sleep.reduce((sum, item) => sum + Number(item.sleepHours), 0) / sleep.length).toFixed(1) + " h" : "Sin datos";
   const summary = workouts.length + " entrenamientos, " + minutes + " minutos de actividad, " + meals.length +
     " comidas registradas, " + Math.round(protein) + " g de proteína acumulada y sueño promedio " + sleepAverage + ".";
