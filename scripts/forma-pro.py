@@ -131,82 +131,8 @@ app = once(
 
 # Keep a compact local history of completed scans. It contains measurements,
 # estimates and timestamps only — never photographs or Gemini conversation text.
-history_code = r"""
-// FORMA local scan history: compact snapshots only, capped at 12 records.
-const formaOriginalRenderScanResult = renderScanResult;
-renderScanResult = function(...args) {
-  const result = state.scanResult;
-  if (result && result.createdAt) {
-    state.scanHistory = Array.isArray(state.scanHistory) ? state.scanHistory : [];
-    const id = String(result.createdAt);
-    if (!state.scanHistory.some(item => item && item.id === id)) {
-      const composition = result.composition || {};
-      const measurements = result.measurements || {};
-      const finite = value => value !== null && value !== undefined && Number.isFinite(Number(value));
-      state.scanHistory.unshift({
-        id,
-        createdAt: id,
-        provider: result.analysisProvider || "FORMA",
-        bodyFatPercent: finite(composition.bodyFatPercent) ? Number(composition.bodyFatPercent) : null,
-        bodyFatLow: finite(composition.bodyFatLow) ? Number(composition.bodyFatLow) : null,
-        bodyFatHigh: finite(composition.bodyFatHigh) ? Number(composition.bodyFatHigh) : null,
-        waistCm: finite(measurements.waist?.circumferenceCm) ? Number(measurements.waist.circumferenceCm) : null,
-        hipCm: finite(measurements.hip?.circumferenceCm) ? Number(measurements.hip.circumferenceCm) : null,
-        photoCount: Number(result.visualFallback?.imageCount || 0)
-      });
-      state.scanHistory = state.scanHistory.slice(0, 12);
-      try { saveState(); } catch (error) { console.warn("FORMA could not persist scan history:", error); }
-    }
-  }
+# Scan history is already implemented by forma-clad.py; avoid a duplicate wrapper.
 
-  formaOriginalRenderScanResult.apply(this, args);
-  const root = $('#scan-result');
-  if (!root) return;
-  root.querySelector(".forma-scan-history")?.remove();
-  const history = Array.isArray(state.scanHistory) ? state.scanHistory : [];
-  if (!history.length) return;
-
-  const dateLabel = value => {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "Fecha no disponible" :
-      new Intl.DateTimeFormat("es", { day:"2-digit", month:"short", year:"numeric" }).format(date);
-  };
-  const previous = history[1];
-  const current = history[0];
-  const delta = (a, b, unit) => Number.isFinite(a) && Number.isFinite(b)
-    ? (a - b > 0 ? "+" : "") + (a - b).toFixed(1) + unit
-    : "—";
-  const rows = history.slice(0, 6).map((item, index) => {
-    const fat = Number.isFinite(item.bodyFatPercent) ? item.bodyFatPercent.toFixed(1) + "%" : "Lectura visual";
-    const waist = Number.isFinite(item.waistCm) ? item.waistCm.toFixed(1) + " cm" : "—";
-    const marker = index === 0 ? '<span class="forma-history-current">Más reciente</span>' : "";
-    return '<li><div><strong>' + dateLabel(item.createdAt) + '</strong>' + marker +
-      '<small>' + String(item.provider || "FORMA").replace(/[<>&"]/g, "") + '</small></div>' +
-      '<span>' + fat + '</span><span>' + waist + '</span></li>';
-  }).join("");
-  const summary = previous
-    ? '<p class="forma-history-delta">Último cambio · grasa: <strong>' +
-      delta(current.bodyFatPercent, previous.bodyFatPercent, " pp") +
-      '</strong> · cintura: <strong>' + delta(current.waistCm, previous.waistCm, " cm") +
-      '</strong></p>'
-    : '<p class="forma-history-delta">Conserva tus próximos análisis para ver la evolución entre fechas.</p>';
-  root.insertAdjacentHTML("beforeend",
-    '<section class="forma-scan-history" aria-label="Historial de análisis">' +
-      '<div class="forma-history-heading"><div><span>SEGUIMIENTO LOCAL</span><h3>Tu evolución</h3></div>' +
-      '<button type="button" class="forma-history-clear" id="clear-forma-scan-history">Borrar historial</button></div>' +
-      summary +
-      '<div class="forma-history-table-head"><span>FECHA</span><span>GRASA</span><span>CINTURA</span></div>' +
-      '<ol>' + rows + '</ol>' +
-      '<small class="forma-history-privacy">Se guarda en este dispositivo. El historial no contiene fotografías.</small>' +
-    '</section>');
-  root.querySelector("#clear-forma-scan-history")?.addEventListener("click", () => {
-    state.scanHistory = [];
-    try { saveState(); } catch (error) { console.warn("FORMA history clear failed:", error); }
-    root.querySelector(".forma-scan-history")?.remove();
-  });
-};
-"""
-app += "\n" + history_code + "\n"
 app_path.write_text(app, encoding="utf-8")
 
 # Final UI polish. This is deliberately appended after other theme layers.
@@ -267,44 +193,28 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   border-top:1px solid var(--forma-border);
   color:var(--forma-text);
 }
-.forma-history-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.forma-history-heading>div>span {
-  color:var(--forma-accent); font-size:9px; font-weight:850; letter-spacing:.17em;
+.forma-history-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.forma-history-header h3 { color:var(--forma-text); font-size:19px; margin:6px 0 4px; }
+.forma-history-header p { color:var(--forma-muted); font-size:11px; line-height:1.5; margin:0; }
+.forma-history-count {
+  display:grid; place-items:center; min-width:30px; height:30px; padding:0 8px;
+  border-radius:999px; background:rgba(184,239,88,.1); color:var(--forma-accent);
+  font-size:12px; font-weight:800;
 }
-.forma-history-heading h3 { margin:5px 0 0; font-size:20px; }
-.forma-history-clear {
-  border:0; background:transparent; color:var(--forma-muted);
-  font-size:10px; text-decoration:underline; text-underline-offset:3px;
+.forma-history-chart { display:block; width:100%; max-height:110px; margin:16px 0 6px; }
+.forma-history-trend { margin:0 0 12px; color:#d8f4a6; font-size:11px; font-weight:750; }
+.forma-history-empty { color:var(--forma-muted); font-size:11px; line-height:1.5; }
+.forma-history-list { display:grid; }
+.forma-history-row {
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:12px 0; border-top:1px solid rgba(198,224,212,.08);
 }
-.forma-history-delta { color:var(--forma-muted); font-size:11px; line-height:1.5; margin:13px 0; }
-.forma-history-delta strong { color:#dff4c3; font-variant-numeric:tabular-nums; }
-.forma-history-table-head,.forma-scan-history li {
-  display:grid; grid-template-columns:minmax(0,1.3fr) .8fr .8fr; gap:8px; align-items:center;
-}
-.forma-history-table-head {
-  padding:9px 0; border-bottom:1px solid var(--forma-border);
-  color:#82978d; font-size:8px; font-weight:850; letter-spacing:.1em;
-}
-.forma-scan-history ol { list-style:none; padding:0; margin:0; }
-.forma-scan-history li {
-  min-height:54px; padding:9px 0; border-bottom:1px solid rgba(198,224,212,.07);
-  color:#e6eee9; font-size:11px; font-variant-numeric:tabular-nums;
-}
-.forma-scan-history li>div { display:grid; gap:4px; min-width:0; }
-.forma-scan-history li>div strong { font-size:11px; }
-.forma-scan-history li>div small { color:var(--forma-muted); font-size:9px; }
-.forma-scan-history li>span { text-align:left; }
-.forma-history-current {
-  display:inline-block; width:max-content; padding:2px 6px; border-radius:999px;
-  color:#d8f4a6 !important; background:rgba(184,239,88,.10); font-size:8px !important;
-}
-.forma-history-privacy {
-  display:block; margin-top:12px; color:#82978d; font-size:9px; line-height:1.5;
-}
+.forma-history-row span { flex:0 0 82px; color:var(--forma-muted); font-size:11px; }
+.forma-history-row strong { color:var(--forma-text); font-size:11px; font-weight:650; text-align:right; }
+.forma-history-note { margin:12px 0 0; color:var(--forma-muted); font-size:10px; line-height:1.5; }
 @media(max-width:430px) {
-  .forma-history-heading { align-items:flex-start; }
-  .forma-history-table-head,.forma-scan-history li { grid-template-columns:minmax(0,1.2fr) .8fr .8fr; gap:5px; }
-  .forma-scan-history li { font-size:10px; }
+  .forma-history-row { align-items:flex-start; flex-direction:column; gap:4px; }
+  .forma-history-row strong { text-align:left; }
 }
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
