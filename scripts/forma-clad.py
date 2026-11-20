@@ -130,15 +130,12 @@ async function runBodyScan() {
   ]);
   let bodyComp = bodyCompResult.status === "fulfilled" ? bodyCompResult.value : null;
   const captureQualityFromBodyComp = bodyComp?.quality || null;
-  const captureQualityAcceptable = Boolean(
-    captureQualityFromBodyComp?.front?.usable &&
-    captureQualityFromBodyComp?.side?.usable
-  );
-  // Always attempt the model, but do not present numbers from silhouettes that
-  // failed its own pose / framing checks. Gemini can still describe the visible photo.
-  if (bodyComp && !captureQualityAcceptable) {
-    console.warn("FORMA BodyComp output withheld because photo quality checks failed.", captureQualityFromBodyComp);
-    bodyComp = null;
+  // Quality checks are advisory, not a hard gate. Keep the model's estimates
+  // when the numerical output passes its own coherence validation, and show
+  // capture limitations alongside the result instead of discarding it.
+  if (bodyComp && (captureQualityFromBodyComp?.front?.usable !== true ||
+      captureQualityFromBodyComp?.side?.usable !== true)) {
+    console.info("FORMA is displaying estimates with photo-quality limitations.", captureQualityFromBodyComp);
   }
   const clad = cladResult.status === "fulfilled" ? cladResult.value : null;
   let visualText = null;
