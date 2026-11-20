@@ -121,6 +121,11 @@ if old in app:
 app = app.replace("LECTURA VISUAL DE GEMINI", "LECTURA VISUAL")
 app = app.replace("Modelo BodyComp · análisis fotográfico", "Análisis fotográfico")
 app = app.replace('result.analysisProvider === "Clad" ? "Reconstrucción a partir de fotografía" : "Análisis fotográfico"', '"Análisis fotográfico"')
+app = app.replace("Gemini analizó las fotografías y describió lo que puede observarse.", "La lectura visual de tus fotografías está lista.")
+app = app.replace("Análisis completado con composición estimada y lectura visual de Gemini.", "Análisis completado con composición estimada y lectura visual.")
+app = app.replace("Se obtuvieron medidas parciales y Gemini completó una lectura visual.", "Se obtuvieron medidas parciales y se completó una lectura visual.")
+app = app.replace(" cm · Clad", " cm")
+app = app.replace("detector = await createPoseLandmarker();", 'detector = await formaWithTimeout(createPoseLandmarker(), 15000, "El detector de postura superó el tiempo de espera.");')
 for forbidden in ("scan-cloud-consent", "forma-clad-consent"):
     if forbidden in app:
         raise SystemExit(f"Provider-specific control reference remains in app.js: {forbidden}")
