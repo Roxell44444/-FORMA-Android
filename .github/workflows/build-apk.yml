@@ -116,7 +116,11 @@ jobs:
           consent_start = app.index("function formaEnsureCloudScanConsent")
           consent_end = app.index("function formaWithTimeout", consent_start)
           assert "window.confirm" not in app[consent_start:consent_end], "Scanner must not show a consent modal"
+          assert 'scan-remote-fallback-consent' in html + app, "Generic scan permission toggle is missing"
           assert 'fs-remote-scan-consent' in app, "Remote fallback setting is missing from Privacy"
+          assert 'formaVisualFallbackError' in app, "Remote fallback errors must be surfaced to the user"
+          assert 'No se ha enviado ninguna foto.' in app, "Disabled fallback must clearly state no upload occurred"
+          assert 'El respaldo por internet está desactivado' in app, "Disabled fallback must be explained clearly"
           assert 'formaWithTimeout(bodyCompPromise' in app, "Local scanner timeout/failover missing"
           assert 'const canRunClad = false;' in app, "Potentially paid 3D provider must remain disabled"
           assert 'state.scanResult || null' in app, "Main Coach must receive the current scan"
@@ -137,14 +141,14 @@ jobs:
           from pathlib import Path
           p = Path("FORMA-1.1.0/package.json")
           data = json.loads(p.read_text(encoding="utf-8"))
-          data["version"] = "1.9.0"
+          data["version"] = "1.9.1"
           p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           g = Path("FORMA-1.1.0/android/app/build.gradle")
           s = g.read_text(encoding="utf-8")
-          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.9.0"', s)
-          assert 'versionName "1.9.0"' in s, "Android versionName was not updated"
-          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 14", s)
-          assert "versionCode 14" in s, "Android versionCode was not updated"
+          s = __import__("re").sub(r"""versionName\s+["'][^"']+["']""", 'versionName "1.9.1"', s)
+          assert 'versionName "1.9.1"' in s, "Android versionName was not updated"
+          s = __import__("re").sub(r"versionCode\s+\d+", "versionCode 15", s)
+          assert "versionCode 15" in s, "Android versionCode was not updated"
           g.write_text(s, encoding="utf-8")
           PY
           echo "BodyComp source and MediaPipe segmentation model prepared."
@@ -213,7 +217,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build FORMA 1.9.0 APK
+      - name: Build FORMA 1.9.1 APK
         working-directory: FORMA-1.1.0/android
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -222,7 +226,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FORMA-1.9.0-debug-apk
+          name: FORMA-1.9.1-debug-apk
           path: FORMA-1.1.0/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
 
