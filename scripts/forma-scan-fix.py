@@ -399,12 +399,8 @@ history_new = """    bodyFatHigh: finiteOrNull(composition?.bodyFatHigh),
 if history_old not in app:
     raise SystemExit("Could not extend the saved scan history fields.")
 app = app.replace(history_old, history_new, 1)
-suite_context_old = """    latestScan: latest ? {
-      source: latest.source, bodyFatPercent: latest.bodyFatPercent,
-      bodyFatInterval: [latest.bodyFatLow, latest.bodyFatHigh],
-      waistCm: latest.waistCm, date: latest.date
-    } : null,"""
-suite_context_new = """    latestScan: latest ? {
+suite_context_pattern = r'latestScan: latest \\? \\{.*?\\} : null,'
+suite_context_new = """latestScan: latest ? {
       source: "Análisis corporal",
       bodyFatPercent: latest.bodyFatPercent,
       bodyFatInterval: [latest.bodyFatLow, latest.bodyFatHigh],
@@ -418,9 +414,9 @@ suite_context_new = """    latestScan: latest ? {
       visualOnly: latest.visualOnly === true,
       date: latest.date
     } : null,"""
-if suite_context_old not in app:
+app, suite_context_count = re.subn(suite_context_pattern, suite_context_new, app, count=1, flags=re.S)
+if suite_context_count != 1:
     raise SystemExit("Could not extend Studio Coach scan context.")
-app = app.replace(suite_context_old, suite_context_new, 1)
 
 app = app.replace("Gemini analizó las fotografías y describió lo que puede observarse.", "La lectura visual de tus fotografías está lista.")
 app = app.replace("Análisis completado con composición estimada y lectura visual de Gemini.", "Análisis completado con composición estimada y lectura visual.")
