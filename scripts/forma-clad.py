@@ -89,27 +89,16 @@ async function runGeminiPhotoFallback() {
       { label: "Primera fotografía", image: $('img', $('#slot-front')) },
       { label: "Segunda fotografía", image: $('img', $('#slot-side')) }
     ].filter(item => item.image && item.image.complete && item.image.naturalWidth > 0);
-    if (!candidates.length) throw new Error("No hay ninguna fotografía cargada.");
+    if (!candidates.length) return null;
     const images = await Promise.all(candidates.map(async item => ({
       label: item.label,
       image: await imageToCompactDataUrl(item.image)
     })));
     const text = await askFormaVisualFallback({ images });
-    state.scanResult = {
-      visualFallback: { text, imageCount: images.length },
-      createdAt: new Date().toISOString()
-    };
-    saveState();
-    renderScanResult();
-    renderPlan();
-    renderDiet();
-    $('#capture-status').textContent = "FORMA ha analizado lo que aparece en tus fotografías. Las cifras solo se muestran cuando hay base suficiente.";
-    $('#pose-pair-summary').textContent = "Análisis visual realizado con " + images.length + (images.length === 1 ? " fotografía." : " fotografías.");
-    toast("Análisis visual completado.");
-    return true;
+    return typeof text === "string" && text.trim() ? text.trim() : null;
   } catch (error) {
     console.warn("FORMA visual analysis unavailable:", error);
-    return false;
+    return null;
   }
 }
 
@@ -136,34 +125,51 @@ async function runBodyScan() {
     Number.isFinite(Number(profile.height)) && Number(profile.height) >= 130 && Number(profile.height) <= 230 &&
     Number.isFinite(Number(profile.weight)) && Number(profile.weight) > 0;
 
-  const canRunBodyComp =
-    hasFront && hasSide && hasNumericProfile &&
-    poseResults.front?.status === "fulfilled" && poseResults.side?.status === "fulfilled" &&
-    poseResults.front.landmarks?.length && poseResults.side.landmarks?.length;
-
+  // La segmentación local se intenta aunque MediaPipe no haya devuelto landmarks.
+  // Las advertencias de calidad se muestran en el informe, no bloquean el cálculo.
+  const canRunBodyComp = hasFront && hasSide && hasNumericProfile;
   const bodyCompPromise = canRunBodyComp
-    ? analyseBodyCompPhotos(frontImage, sideImage, profile, poseResults.front.landmarks, poseResults.side.landmarks)
+    ? Promise.resolve().then(() => analyseBodyCompPhotos(
+        frontImage, sideImage, profile,
+        poseResults.front?.landmarks || null,
+        poseResults.side?.landmarks || null
+      ))
     : Promise.resolve(null);
 
-  // Clad recibe una sola imagen frontal si existe. Si solo hay otra vista,
-  // Gemini sigue analizando esa fotografía sin bloquear al usuario.
-  const canRunClad = hasFront && Number(profile.height) >= 140 && Number(profile.height) <= 220;
-  const cladPromise = canRunClad ? runCladPhotoScan(frontImage) : Promise.resolve(null);
+  // Clad se intenta con la primera imagen disponible, frontal o lateral.
+  const imageForClad = hasFront ? frontImage : sideImage;
+  const canRunClad = Boolean(imageForClad) &&
+    Number(profile.height) >= 140 && Number(profile.height) <= 220;
+  const cladPromise = canRunClad ? runCladPhotoScan(imageForClad) : Promise.resolve(null);
+  const visualPromise = Promise.resolve().then(() => runGeminiPhotoFallback());
 
-  const [bodyCompResult, cladResult] = await Promise.allSettled([bodyCompPromise, cladPromise]);
+  const [bodyCompResult, cladResult, visualResult] = await Promise.allSettled([
+    bodyCompPromise, cladPromise, visualPromise
+  ]);
   let bodyComp = bodyCompResult.status === "fulfilled" ? bodyCompResult.value : null;
   const clad = cladResult.status === "fulfilled" ? cladResult.value : null;
+  const visualText = visualResult.status === "fulfilled" && typeof visualResult.value === "string"
+    ? visualResult.value : null;
   if (!bodyComp && bodyCompResult.status === "rejected") console.warn("FORMA BodyComp unavailable:", bodyCompResult.reason);
   if (!clad && cladResult.status === "rejected") console.warn("FORMA Clad unavailable:", cladResult.reason);
 
   if (!bodyComp && !clad) {
-    state.scanResult = null;
+    state.scanResult = visualText ? {
+      visualFallback: { text: visualText, imageCount: Number(hasFront) + Number(hasSide) },
+      analysisProvider: "Gemini",
+      engines: { bodyComp: "unavailable", clad: "unavailable", gemini: "completed" },
+      createdAt: new Date().toISOString()
+    } : null;
     saveState();
-    const usedVisualFallback = await runGeminiPhotoFallback();
-    if (!usedVisualFallback) {
-      $('#capture-status').textContent = "No se pudo conectar con el análisis visual. Comprueba Internet e inténtalo de nuevo.";
-      renderScanResult();
-    }
+    renderScanResult();
+    renderPlan();
+    renderDiet();
+    $('#capture-status').textContent = visualText
+      ? "Gemini analizó las fotografías y describió lo que puede observarse."
+      : "Los motores no pudieron completar el análisis. Comprueba la conexión e inténtalo de nuevo.";
+    $('#pose-pair-summary').textContent = visualText
+      ? "Lectura visual completada con " + (Number(hasFront) + Number(hasSide)) + " fotografía(s)."
+      : "No llegó una respuesta utilizable de los servicios de análisis.";
     return;
   }
 
@@ -214,9 +220,16 @@ async function runBodyScan() {
   }
 
   if (!bodyComp && !clad) {
-    state.scanResult = null;
+    state.scanResult = visualText ? {
+      visualFallback: { text: visualText, imageCount: Number(hasFront) + Number(hasSide) },
+      analysisProvider: "Gemini",
+      engines: { bodyComp: "unavailable", clad: "unavailable", gemini: "completed" },
+      createdAt: new Date().toISOString()
+    } : null;
     saveState();
-    await runGeminiPhotoFallback();
+    renderScanResult();
+    renderPlan();
+    renderDiet();
     return;
   }
 
@@ -228,12 +241,14 @@ async function runBodyScan() {
     appendicularLeanMassKg,
     captureQuality,
     analysisProvider: bodyComp ? "BodyComp" : "Clad",
+    visualFallback: visualText ? { text: visualText, imageCount: Number(hasFront) + Number(hasSide) } : null,
     cladMeasurements,
     cladHas3dModel: Boolean(clad?.has3dModel),
     crossCheck: compareScanEngines(bodyComp ? measurements : null, cladMeasurements),
     engines: {
       bodyComp: bodyComp ? "completed" : "unavailable",
-      clad: clad ? "completed" : (canRunClad ? "unavailable" : "not-used")
+      clad: clad ? "completed" : (canRunClad ? "unavailable" : "not-used"),
+      gemini: visualText ? "completed" : "unavailable"
     },
     createdAt: new Date().toISOString()
   };
@@ -241,9 +256,13 @@ async function runBodyScan() {
   renderScanResult();
   renderPlan();
   renderDiet();
-  $('#capture-status').textContent = bodyComp
-    ? "Composición corporal y medidas estimadas listas. Revisa también el margen de incertidumbre."
-    : "Se han obtenido algunas medidas. La composición de grasa y músculo no pudo estimarse con fiabilidad.";
+  $('#capture-status').textContent = bodyComp && visualText
+    ? "Análisis completado con composición estimada y lectura visual de Gemini."
+    : bodyComp
+      ? "Composición corporal y medidas estimadas listas. Revisa también las limitaciones de las fotos."
+      : visualText
+        ? "Se obtuvieron medidas parciales y Gemini completó una lectura visual."
+        : "Se han obtenido algunas medidas. La composición de grasa y músculo no pudo estimarse con fiabilidad.";
   $('#pose-pair-summary').textContent = "Análisis realizado con las fotografías disponibles.";
   $('#view-personal-plan')?.classList.remove("hidden");
   toast("Análisis completado.");
