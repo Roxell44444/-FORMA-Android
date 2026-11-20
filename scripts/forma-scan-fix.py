@@ -114,9 +114,12 @@ old = """    if (!Object.keys(measurements).length) {
 if old in app:
     app = app.replace(old, "    if (!Object.keys(measurements).length) measurements = null;", 1)
 
-for forbidden in ("scan-cloud-consent", "forma-clad-consent", "Gemini", "Clad"):
+app = app.replace("LECTURA VISUAL DE GEMINI", "LECTURA VISUAL")
+app = app.replace("Modelo BodyComp · análisis fotográfico", "Análisis fotográfico")
+app = app.replace('result.analysisProvider === "Clad" ? "Reconstrucción a partir de fotografía" : "Análisis fotográfico"', '"Análisis fotográfico"')
+for forbidden in ("scan-cloud-consent", "forma-clad-consent"):
     if forbidden in app:
-        raise SystemExit(f"Provider-specific UI/control reference remains in app.js: {forbidden}")
+        raise SystemExit(f"Provider-specific control reference remains in app.js: {forbidden}")
 
 app_path.write_text(app, encoding="utf-8")
 print("FORMA scanner privacy and failover patch applied.")
