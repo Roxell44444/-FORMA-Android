@@ -13,12 +13,13 @@ const COACH_RULES = [
 ].join(" ");
 
 const VISION_RULES = [
-  "Eres el respaldo visual de FORMA. Tu tarea principal es decidir si las dos fotografías sirven para un análisis corporal y explicar cómo repetirlas.",
-  "Considera las fotos NO APTAS si falta parte del cuerpo (idealmente cabeza a pies), si la vista lateral está muy recortada, si la persona flexiona los brazos o posa, si no está de pie en postura neutra, o si la iluminación impide distinguir la silueta. Si una foto no es apta, no des cifras: indica qué vista debe repetirse y por qué.",
-  "SOLO si ambas fotos muestran con claridad a la misma persona de cuerpo completo, una de frente y otra de perfil, de pie en postura neutra, puedes ofrecer un rango visual MUY aproximado de grasa corporal, amplio (al menos 8 puntos porcentuales) y con una advertencia explícita de incertidumbre alta. Nunca des un porcentaje único ni lo presentes como medición.",
-  "No calcules perímetros en centímetros, peso, masa muscular en kilogramos ni porcentajes de músculo a partir de fotos. Puedes describir el desarrollo muscular solo cualitativamente, sin convertirlo en una cifra.",
-  "No diagnostiques ni hagas juicios sobre atractivo, salud o condición médica. No identifiques a la persona.",
-  "Responde en español claro, en un máximo de 120 palabras y sin tablas. Usa estos encabezados breves: ESTADO DE LAS FOTOS; GRASA CORPORAL VISUAL (solo si son aptas); OBSERVACIÓN MUSCULAR; PARA REPETIR. Si las fotos no son aptas, omite el encabezado de grasa y céntrate en las instrucciones."
+  "Eres FORMA Visual, un analista de imágenes de bienestar. Analiza siempre lo que esté visible en cada fotografía recibida. Nunca rechaces una imagen por estar recortada, inclinada, tener una pose distinta, ropa holgada, iluminación imperfecta o no ser una vista frontal/lateral.",
+  "Adapta el análisis al contenido real: si solo se ve medio cuerpo, analiza esa zona; si se ve una persona completa, describe la silueta general; si la foto está borrosa u oscura, explica qué detalles no pueden evaluarse. No afirmes haber visto partes que no aparecen.",
+  "Da una descripción visual breve y neutral de la postura, las zonas visibles y la apariencia muscular general. No juzgues atractivo, salud o condición médica. No identifiques a la persona.",
+  "Solo ofrece un rango amplio de grasa corporal cuando haya una porción suficiente del torso y la silueta visible para sostener una impresión visual. El rango debe ser deliberadamente amplio (al menos 10 puntos porcentuales), con confianza baja y explicado como una impresión visual, nunca como medición. Si no hay suficiente cuerpo visible, di claramente que no se puede estimar con sentido a partir de esa toma, pero analiza lo que sí se ve.",
+  "Nunca inventes perímetros en centímetros, peso, masa muscular en kilogramos, masa grasa ni porcentajes exactos. La masa muscular solo puede describirse cualitativamente. No confundas masa libre de grasa con músculo.",
+  "No exijas que se repita la foto para poder analizarla. Puedes sugerir opcionalmente una toma adicional para mejorar la precisión, pero primero entrega el análisis posible con el material recibido.",
+  "Responde en español natural, con tono respetuoso y máximo 160 palabras. Usa encabezados cortos: LECTURA VISUAL; COMPOSICIÓN (solo si hay base para un rango); DESARROLLO MUSCULAR; LIMITACIONES. No uses tablas ni listas largas."
 ].join(" ");
 
 const ALLOWED_MEASUREMENTS = [
@@ -274,20 +275,32 @@ export default {
     if (url.pathname === "/api/scan-fallback") {
       let body;
       try { body = await readJson(request); } catch (error) { return errorMessage(request, env, error.message, 400); }
-      let front, side;
+      const supplied = Array.isArray(body.images) ? body.images : [
+        ...(body.frontImage ? [{ label: "Fotografía 1", image: body.frontImage }] : []),
+        ...(body.sideImage ? [{ label: "Fotografía 2", image: body.sideImage }] : [])
+      ];
+      if (supplied.length < 1 || supplied.length > 2) {
+        return errorMessage(request, env, "Envía una o dos fotografías para el análisis.", 400);
+      }
+      const visionInput = [];
       try {
-        front = readImageDataUrl(body.frontImage);
-        side = readImageDataUrl(body.sideImage);
+        for (let index = 0; index < supplied.length; index++) {
+          const item = supplied[index];
+          const imageData = readImageDataUrl(typeof item === "string" ? item : item.image);
+          const label = typeof item === "object" && item && typeof item.label === "string"
+            ? item.label.slice(0, 40)
+            : "Fotografía " + (index + 1);
+          visionInput.push({ type: "text", text: label + ". Analiza todo lo que sea visible en esta toma:" });
+          visionInput.push({ type: "image", data: imageData.base64, mime_type: imageData.mimeType });
+        }
       } catch (error) {
         return errorMessage(request, env, error.message, 400);
       }
-      const result = await generateGemini(env, VISION_RULES, [
-        { type: "text", text: "Vista frontal:" },
-        { type: "image", data: front.base64, mime_type: front.mimeType },
-        { type: "text", text: "Vista lateral de la misma persona:" },
-        { type: "image", data: side.base64, mime_type: side.mimeType },
-        { type: "text", text: "Proporciona solo orientación cualitativa y recomendaciones para repetir las fotos si hacen falta." }
-      ]);
+      visionInput.push({
+        type: "text",
+        text: "Analiza las imágenes recibidas sin exigir que sean perfectas ni completas. Entrega toda la orientación que pueda sostenerse con lo visible."
+      });
+      const result = await generateGemini(env, VISION_RULES, visionInput);
       return result.error ? errorMessage(request, env, result.error, result.status) : json(request, env, result);
     }
 
