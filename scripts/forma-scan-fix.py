@@ -426,5 +426,160 @@ app = app.replace("La pregunta se envía a Gemini al pulsar el botón.", "La pre
 if "window.confirm(" in app[app.find("function formaEnsureCloudScanConsent"):app.find("function formaWithTimeout")]:
     raise SystemExit("Scanner confirmation was not removed.")
 
+
+# Show one generic, non-blocking consent directly on the scanner. The remote
+# option stays off until the user explicitly enables it; no modal interrupts a scan.
+html, consent_ui_count = re.subn(
+    r'<p class="scan-privacy-note">.*?</p>\s*',
+    '''<p class="scan-privacy-note">El análisis local se intenta primero. Si no obtiene cifras, puedes permitir una lectura complementaria por internet con la opción siguiente. Las fotografías no salen del teléfono mientras esté desactivada.</p>
+              <label class="scan-remote-consent" for="scan-remote-fallback-consent"><input id="scan-remote-fallback-consent" type="checkbox"><span><strong>Permitir lectura complementaria por internet</strong><small>Solo se enviarán las fotografías seleccionadas si el cálculo local no puede completarse. Puede utilizar la cuota o los límites del servicio conectado.</small></span></label>
+''',
+    html, count=1, flags=re.S
+)
+if consent_ui_count != 1:
+    raise SystemExit("Could not place the generic scanner privacy option.")
+html_path.write_text(html, encoding="utf-8")
+
+css_path = ROOT / "src/ui/styles.css"
+css = css_path.read_text(encoding="utf-8")
+css += """
+/* Generic remote-analysis permission, shown beside the scan action without a modal. */
+.scan-remote-consent{display:flex;align-items:flex-start;gap:12px;margin:14px 0 20px;padding:14px 15px;border:1px solid var(--forma-border,rgba(198,224,212,.16));border-radius:16px;background:rgba(23,36,40,.72);color:var(--forma-text,#edf4ef);font-size:.9rem;line-height:1.45;cursor:pointer}
+.scan-remote-consent input{flex:0 0 auto;width:19px;height:19px;margin:2px 0 0;accent-color:var(--forma-accent,#b8ef58)}
+.scan-remote-consent span{display:grid;gap:4px}
+.scan-remote-consent strong{font-weight:650}
+.scan-remote-consent small{display:block;color:var(--forma-muted,#9aada5);font-size:.82rem;line-height:1.45}
+"""
+css_path.write_text(css, encoding="utf-8")
+
+# Capture the exact network/config/quota failure instead of swallowing it.
+if "let formaVisualFallbackError = null;" not in app:
+    app = app.replace(
+        "async function runGeminiPhotoFallback() {",
+        "let formaVisualFallbackError = null;\n\nasync function runGeminiPhotoFallback() {",
+        1
+    )
+app = app.replace(
+    """async function runGeminiPhotoFallback() {
+  if (!formaRemoteScanAllowed) return null;""",
+    """async function runGeminiPhotoFallback() {
+  formaVisualFallbackError = null;
+  if (!formaRemoteScanAllowed) return null;"""
+)
+app = app.replace(
+    """  } catch (error) {
+    console.warn('FORMA visual analysis unavailable:', error);
+    return null;
+  }
+}
+
+function cladMeasurementsFromResult""",
+    """  } catch (error) {
+    formaVisualFallbackError = String(error?.message || error || "No se pudo completar la lectura complementaria.")
+      .replace(/Gemini|Clad/gi, "el servicio remoto")
+      .slice(0, 220);
+    console.warn('FORMA visual analysis unavailable:', error);
+    return null;
+  }
+}
+
+function cladMeasurementsFromResult"""
+)
+if "formaVisualFallbackError = String(error?.message" not in app:
+    raise SystemExit("Could not preserve the remote fallback error.")
+
+# Bind the same preference from the scan page and Mi progreso > Privacidad.
+consent_state_anchor = "let formaRemoteScanAllowed = false;"
+consent_binding = """let formaRemoteScanAllowed = false;
+const formaScanRemoteConsentControl = $("#scan-remote-fallback-consent");
+if (formaScanRemoteConsentControl) {
+  formaScanRemoteConsentControl.checked = formaEnsureCloudScanConsent();
+  formaScanRemoteConsentControl.addEventListener("change", () => {
+    formaRemoteScanAllowed = formaScanRemoteConsentControl.checked === true;
+    try {
+      if (formaRemoteScanAllowed) localStorage.setItem("forma.cloud-scan-consent.v1", "accepted");
+      else localStorage.removeItem("forma.cloud-scan-consent.v1");
+    } catch (error) {
+      console.warn("FORMA could not save the scanner privacy preference:", error);
+      formaRemoteScanAllowed = false;
+      formaScanRemoteConsentControl.checked = false;
+    }
+  });
+}"""
+if app.count(consent_state_anchor) != 1:
+    raise SystemExit("Could not bind the scanner privacy option.")
+app = app.replace(consent_state_anchor, consent_binding, 1)
+
+# Explain the local eligibility requirements and whether any remote request was made.
+old_no_result = """    $('#capture-status').textContent = visualText
+      ? "La lectura visual de tus fotografías está lista."
+      : cloudAnalysisAllowed ? "No llegó una respuesta visual. Comprueba la conexión e inténtalo de nuevo." : "El análisis local no pudo obtener cifras con esta fotografía. Autoriza el procesamiento remoto para recibir una lectura de las zonas visibles.";
+    $('#pose-pair-summary').textContent = visualText
+      ? "Lectura visual completada con " + (Number(hasFront) + Number(hasSide)) + " fotografía(s)."
+      : "No llegó una respuesta utilizable de los servicios de análisis.";"""
+new_no_result = """    const missingLocalRequirements = [];
+    if (!hasFront) missingLocalRequirements.push("una foto de frente");
+    if (!hasSide) missingLocalRequirements.push("una foto de perfil");
+    if (!(Number(profile.age) >= 18 && Number(profile.age) <= 59)) missingLocalRequirements.push("una edad adulta dentro del rango de referencia local");
+    if (!["male", "female"].includes(profile.equation)) missingLocalRequirements.push("la referencia corporal del perfil");
+    if (!(Number(profile.height) >= 130 && Number(profile.height) <= 230)) missingLocalRequirements.push("la estatura en tu perfil");
+    if (!(Number(profile.weight) > 0)) missingLocalRequirements.push("el peso en tu perfil");
+    const localRequirementsText = missingLocalRequirements.length
+      ? "Para intentar el cálculo local hacen falta: " + missingLocalRequirements.join(", ") + "."
+      : "Las fotos no permitieron obtener medidas numéricas fiables con el cálculo local.";
+    const remoteFailureText = formaVisualFallbackError
+      ? " La lectura complementaria no se completó: " + formaVisualFallbackError
+      : " La lectura complementaria no devolvió un resultado.";
+    $('#capture-status').textContent = visualText
+      ? "La lectura visual de tus fotografías está lista."
+      : cloudAnalysisAllowed
+        ? "No se pudo completar la lectura complementaria." + remoteFailureText
+        : localRequirementsText + " No se ha enviado ninguna foto. Activa «Permitir lectura complementaria por internet» debajo del aviso si deseas intentarlo por esa vía.";
+    $('#pose-pair-summary').textContent = visualText
+      ? "Lectura visual completada con " + (Number(hasFront) + Number(hasSide)) + " fotografía(s)."
+      : cloudAnalysisAllowed
+        ? "El cálculo local y la lectura complementaria no completaron un resultado."
+        : "El cálculo local no obtuvo cifras y el respaldo por internet está desactivado; no se enviaron fotografías.";"""
+if !app.includes(old_no_result)) throw new Error("Could not find no-result scanner messages");
+app = app.replace(old_no_result, new_no_result, 1)
+
+# Make the start action mirror saved settings and retain the last useful error.
+app = app.replace(
+    """  formaRemoteScanAllowed = formaEnsureCloudScanConsent();
+  scanBusy = true;""",
+    """  formaRemoteScanAllowed = formaEnsureCloudScanConsent();
+  if (formaScanRemoteConsentControl) formaScanRemoteConsentControl.checked = formaRemoteScanAllowed;
+  formaVisualFallbackError = null;
+  scanBusy = true;"""
+)
+app = app.replace(
+    """    if (!visualFallbackDone) {
+      $('#capture-status').textContent = "No se pudo completar el análisis. Comprueba la conexión y los datos del perfil; puedes intentarlo de nuevo.";
+    }""",
+    """    if (!visualFallbackDone) {
+      const reason = formaRemoteScanAllowed && formaVisualFallbackError
+        ? " La lectura complementaria falló: " + formaVisualFallbackError
+        : formaRemoteScanAllowed
+          ? " No se recibió una respuesta; comprueba tu conexión."
+          : " No se enviaron fotografías: el respaldo por internet está desactivado.";
+      $('#capture-status').textContent = "No se pudo completar el análisis local." + reason;
+      $('#pose-pair-summary').textContent = "Revisa las indicaciones del análisis y vuelve a intentarlo.";
+    }"""
+)
+
+# Keep the privacy switch in Mi progreso synchronized with the scanner switch.
+app = app.replace(
+    """        if (remoteConsent.checked) localStorage.setItem("forma.cloud-scan-consent.v1", "accepted");
+        else localStorage.removeItem("forma.cloud-scan-consent.v1");""",
+    """        if (remoteConsent.checked) localStorage.setItem("forma.cloud-scan-consent.v1", "accepted");
+        else localStorage.removeItem("forma.cloud-scan-consent.v1");
+        if (formaScanRemoteConsentControl) formaScanRemoteConsentControl.checked = remoteConsent.checked;"""
+)
+if "El cálculo local no obtuvo cifras y el respaldo por internet está desactivado" not in app:
+    raise SystemExit("Scanner failure diagnostics were not installed.")
+
+app_path.write_text(app, encoding="utf-8")
+print("FORMA scan consent and actionable fallback diagnostics applied.")
+
 app_path.write_text(app, encoding="utf-8")
 print("FORMA scanner privacy and failover patch applied.")
