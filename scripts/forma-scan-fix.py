@@ -93,11 +93,11 @@ app = app.replace(
 
 # Ask once before any remote photo processing; declining still allows local analysis.
 if "let formaRemoteScanAllowed = false;" not in app:
-    app = app.replace(anchor, "let formaRemoteScanAllowed = false;\\n\\n" + anchor, 1)
+    app = app.replace(anchor, "let formaRemoteScanAllowed = false;\n\n" + anchor, 1)
 fallback_anchor = "async function runGeminiPhotoFallback() {"
 if app.count(fallback_anchor) != 1:
     raise SystemExit("Could not find visual fallback entry point.")
-app = app.replace(fallback_anchor, fallback_anchor + "\\n  if (!formaRemoteScanAllowed) return null;", 1)
+app = app.replace(fallback_anchor, fallback_anchor + "\n  if (!formaRemoteScanAllowed) return null;", 1)
 start_anchor = """  scanBusy = true;
   updateScanButton();"""
 if app.count(start_anchor) != 1:
