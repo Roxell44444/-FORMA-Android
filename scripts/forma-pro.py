@@ -291,6 +291,19 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 """
 css_path.write_text(css, encoding="utf-8")
 
+# Re-apply the offline model path after the base ZIP is unpacked.
+bodycomp_path = ROOT / "src/scanner/bodycomp.js"
+bodycomp = bodycomp_path.read_text(encoding="utf-8")
+bodycomp, model_base_count = re.subn(
+    r'const BODYCOMP_MODELS = [^;]+;',
+    'const BODYCOMP_MODELS = new URL("../../models/bodycomp/", import.meta.url).href;',
+    bodycomp,
+    count=1,
+)
+if model_base_count != 1:
+    raise SystemExit("Could not configure bundled BodyComp model assets.")
+bodycomp_path.write_text(bodycomp, encoding="utf-8")
+
 # Build-time invariants: fail early if a later generator change drops a feature.
 check = app_path.read_text(encoding="utf-8")
 for required in ["scan-cloud-consent", "forma-clad-consent", "forma-scan-history", "preserve partial"]:
