@@ -2,7 +2,7 @@ let configPromise;
 
 async function apiBaseUrl() {
   if (!configPromise) {
-    configPromise = fetch("./config.json", { cache: "no-store" })
+    configPromise = fetch("./public/config.json", { cache: "no-store" })
       .then(response => {
         if (!response.ok) throw new Error("La conexión inteligente no está configurada.");
         return response.json();
