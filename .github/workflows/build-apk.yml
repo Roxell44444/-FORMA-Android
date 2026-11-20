@@ -114,6 +114,10 @@ jobs:
           assert 'Gemini' not in html and 'Clad' not in html, "Provider name remains in scanner HTML"
           assert 'formaEnsureCloudScanConsent' in app, "Generic one-time privacy consent missing"
           assert 'formaWithTimeout(bodyCompPromise' in app, "Local scanner timeout/failover missing"
+          assert 'const canRunClad = false;' in app, "Potentially paid 3D provider must remain disabled"
+          assert 'Activa Gemini' not in app and 'Gemini describe las zonas visibles' not in app, "Provider name remains in user-facing scanner copy"
+          assert 'La pregunta se envía a Gemini' not in app, "Provider name remains in Coach copy"
+          assert ' cm · Clad' not in app, "Provider name remains in measurement results"
           assert "output withheld because photo quality checks failed" not in app
           print("Scanner automatic failover, generic privacy consent and UI invariants verified.")
           PY
