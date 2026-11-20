@@ -43,13 +43,13 @@ test("Gemini Coach uses Interactions and disables server-side conversation stora
   try {
     const response = await worker.fetch(
       request("/api/coach", { message: "¿Cómo organizo mi entrenamiento?", context: { profile: { age: 30 } } }),
-      { ...ENV, GEMINI_API_KEY: "test-gemini-key", GEMINI_MODEL: "gemini-3.8-flash" }
+      { ...ENV, GEMINI_API_KEY: "test-gemini-key", GEMINI_MODEL: "gemini-3.5-flash-lite" }
     );
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { text: "Respuesta de prueba." });
     assert.equal(observed.url, "https://generativelanguage.googleapis.com/v1beta/interactions");
     assert.equal(observed.options.headers["x-goog-api-key"], "test-gemini-key");
-    assert.equal(observed.body.model, "gemini-3.8-flash");
+    assert.equal(observed.body.model, "gemini-3.5-flash-lite");
     assert.equal(observed.body.store, false);
     assert.match(observed.body.system_instruction, /FORMA Coach/);
     assert.equal(observed.body.generation_config.temperature, 0.45);
