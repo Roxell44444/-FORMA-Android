@@ -234,9 +234,13 @@ new_render = '''function renderScanResult() {
   if (!root) return;
   const result = state.scanResult;
   if (result?.visualFallback) {
-    root.innerHTML = '<div class="notice notice-neutral"><strong>Orientación visual aproximada</strong><p>' +
-      escapeHTML(result.visualFallback.text) +
-      '</p><small>No es una medición. No se calcularon porcentajes de grasa, músculo ni perímetros.</small></div>';
+    root.innerHTML = '<section class="scan-visual-fallback" aria-label="Orientación visual aproximada"><h3>Orientación visual aproximada</h3><div class="scan-visual-fallback-text">' +
+      escapeHTML(result.visualFallback.text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\s*\*\s+/gm, '• ')
+        .replace(/\s+\*(?=\s|$)/g, '')
+        .replace(/\r?\n/g, '<br>') +
+      '</div><small>Esta orientación no es una medición. Solo puede dar un rango visual muy aproximado cuando las dos fotos son aptas. No calcula perímetros ni masa muscular en kg.</small></section>';
     $('#view-personal-plan')?.classList.add('hidden');
     return;
   }
@@ -307,4 +311,53 @@ worker_path = Path("backend/worker.js")
 worker = worker_path.read_text(encoding="utf-8")
 if "node --check backend/worker.js" not in package:
     print("Worker syntax will be checked in the GitHub Actions workflow.")
+
+# Keep the Gemini visual fallback readable on narrow Android screens.
+css_path = ROOT / "src/ui/styles.css"
+css = css_path.read_text(encoding="utf-8")
+css += """
+.scan-visual-fallback {
+  display:block !important;
+  grid-column:1 / -1;
+  width:100% !important;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  padding:16px;
+  margin:12px 0;
+  border:1px solid var(--line,#dce5eb);
+  border-radius:16px;
+  background:var(--panel-2,#edf3f6);
+  color:var(--text,#172536);
+  white-space:normal;
+  overflow-wrap:anywhere;
+  line-height:1.55;
+}
+.scan-visual-fallback h3 {
+  margin:0 0 12px;
+  font-size:17px;
+  line-height:1.3;
+  color:var(--text,#172536);
+}
+.scan-visual-fallback-text {
+  display:block;
+  width:100%;
+  min-width:0;
+  font-size:14px;
+  line-height:1.6;
+  overflow-wrap:anywhere;
+}
+.scan-visual-fallback-text strong { font-weight:750; }
+.scan-visual-fallback small {
+  display:block;
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line,#dce5eb);
+  color:var(--muted,#5d6d7d);
+  font-size:12px;
+  line-height:1.5;
+}
+"""
+css_path.write_text(css, encoding="utf-8")
+
 print("Clad front-end orchestration and comparison UI integrated.")
