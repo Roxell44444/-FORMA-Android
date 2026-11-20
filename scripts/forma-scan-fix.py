@@ -59,7 +59,10 @@ if "function formaEnsureCloudScanConsent()" not in app:
     app = app.replace(anchor, helper + anchor, 1)
 
 # The remote visual fallback must be governed by one generic consent decision.
-app = re.sub(r'\s*// El envío de fotografías a Gemini requiere consentimiento explícito del usuario\.\n\s*if \(!\$\(\x27#scan-cloud-consent\x27\)\?\.checked\) return null;\n', "\n", app, count=1)
+app = app.replace(
+    "  // El envío de fotografías a Gemini requiere consentimiento explícito del usuario.\\n  if (!$('#scan-cloud-consent')?.checked) return null;\\n",
+    ""
+)
 app = app.replace("$('#forma-clad-consent')?.checked === true;", "formaRemoteScanAllowed;")
 app = app.replace(
     """    const visualFallbackDone = $('#scan-cloud-consent')?.checked === true
