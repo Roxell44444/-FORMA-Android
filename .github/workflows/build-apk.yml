@@ -25,6 +25,22 @@ jobs:
           cp assets/forma-app-icon.webp FORMA-1.1.0/android/app/src/main/res/drawable-nodpi/forma_launcher.webp
           sed -i 's/vision_bundle.mjs/vision_bundle.js/g' FORMA-1.1.0/src/scanner/pose.js FORMA-1.1.0/service-worker.js
 
+      - name: Inspect packaged FORMA source
+        run: |
+          echo '=== FILE INVENTORY ==='
+          find FORMA-1.1.0 -maxdepth 4 -type f | sort | head -240
+          echo '=== PACKAGE ==='
+          cat FORMA-1.1.0/package.json
+          echo '=== APP SOURCE SIZE ==='
+          wc -l FORMA-1.1.0/src/app.js FORMA-1.1.0/index.html
+          echo '=== SOURCE ENTRYPOINTS ==='
+          for f in FORMA-1.1.0/src/app.js FORMA-1.1.0/index.html FORMA-1.1.0/src/scanner/pose.js; do
+            echo "--- $f ---"
+            sed -n '1,260p' "$f"
+          done
+          echo '=== SCAN / COACH / PLAN REFERENCES ==='
+          grep -RniE 'coach|gemini|scan|analyse|analy[sz]|bodycomp|plan|photo|camera' FORMA-1.1.0/src --include='*.js' | head -300
+
       - name: Simplify remaining user-facing copy
         run: |
           python3 - <<'PY'
