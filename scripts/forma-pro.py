@@ -19,29 +19,30 @@ if button not in html:
     button = '              <button class="button button-primary full-width analyze-button" id="analyze-body-scan" disabled>Analizar mi físico</button>'
 if button not in html:
     raise SystemExit("Scanner action button was not found; refusing to inject consent controls in an unknown location.")
-if 'id="scan-cloud-consent"' in html or 'id="forma-clad-consent"' in html:
-    raise SystemExit("Scanner consent controls already exist; refusing to duplicate them.")
-
 privacy = re.search(r'<p class="scan-privacy-note">.*?</p>', html, flags=re.S)
 if not privacy:
     raise SystemExit("Scanner privacy notice was not found.")
 privacy_copy = (
     '<p class="scan-privacy-note">FORMA intentará analizar las imágenes con los motores locales. '
-    'Los servicios externos solo reciben fotografías cuando activas expresamente cada opción.</p>'
+    'Gemini y Clad son servicios externos y solo reciben fotografías cuando activas sus permisos independientes.</p>'
 )
 html = html[:privacy.start()] + privacy_copy + html[privacy.end():]
 
-consent = '''
-              <label class="forma-consent-row" for="scan-cloud-consent">
+consent_parts = []
+if 'id="scan-cloud-consent"' not in html:
+    consent_parts.append('''              <label class="forma-consent-row" for="scan-cloud-consent">
                 <input id="scan-cloud-consent" type="checkbox">
                 <span><strong>Permitir lectura visual con Gemini</strong><small>Envía las fotografías seleccionadas a Google para describir las zonas visibles si los cálculos locales no están disponibles. Opcional.</small></span>
               </label>
-              <label class="forma-consent-row" for="forma-clad-consent">
+''')
+if 'id="forma-clad-consent"' not in html:
+    consent_parts.append('''              <label class="forma-consent-row" for="forma-clad-consent">
                 <input id="forma-clad-consent" type="checkbox">
                 <span><strong>Permitir reconstrucción de medidas con Clad</strong><small>Envía la foto frontal y la estatura a Clad para intentar obtener perímetros. Servicio externo y opcional.</small></span>
               </label>
-'''
-html = once(html, button, consent + button, "scanner consent controls")
+''')
+if consent_parts:
+    html = once(html, button, "".join(consent_parts) + button, "scanner consent controls")
 index_path.write_text(html, encoding="utf-8")
 
 # Improve the orchestration: each engine is independent and consent-gated.
@@ -56,14 +57,19 @@ app = once(
     : Promise.resolve(null);''',
     "Gemini explicit opt-in",
 )
-app = once(
-    app,
-    '''  const canRunClad = Boolean(imageForClad) &&
-    Number(profile.height) >= 140 && Number(profile.height) <= 220;''',
-    '''  const canRunClad = cladAnalysisAllowed && Boolean(imageForClad) &&
-    Number(profile.height) >= 140 && Number(profile.height) <= 220;''',
-    "Clad explicit opt-in",
-)
+old_clad_gate = '''  const canRunClad = Boolean(imageForClad) &&
+    Number(profile.height) >= 140 && Number(profile.height) <= 220;'''
+if old_clad_gate in app:
+    app = once(
+        app,
+        old_clad_gate,
+        '''  const canRunClad = Boolean(imageForClad) &&
+    Number(profile.height) >= 140 && Number(profile.height) <= 220 &&
+    $('#forma-clad-consent')?.checked === true;''',
+        "Clad explicit opt-in",
+    )
+elif "$('#forma-clad-consent')?.checked === true" not in app:
+    raise SystemExit("Clad opt-in is not enforced in the scanner code.")
 
 # Do not throw away body-fat and appendicular-lean estimates just because a
 # perimeter is missing. Preserve each valid field independently.
